@@ -1,0 +1,54 @@
+/**
+ * @fileoverview The file define and instantiates the various NooblyJS applications.
+ *
+ * @author NooblyJS Core Team
+ * @version 1.0.1
+ * @since 2025-08-24
+ */
+
+'use strict';
+
+const express = require('express');
+const http = require('http');
+const bodyParser = require('body-parser');
+const session = require('express-session');
+const passport = require('passport');
+const path = require('path');
+
+const { EventEmitter } = require('events');
+
+// Iniitiate the Web and Api Interface
+const app = express();
+const server = http.createServer(app);
+const PORT = process.env.PORT || 3003;
+
+app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
+app.use(bodyParser.json({ limit: '100mb' }));
+
+// Initialise event system
+const eventEmitter = new EventEmitter()
+
+// Initiate the service Registry
+const serviceRegistry = require('nooblyjs-core');
+serviceRegistry.initialize(app,eventEmitter);
+
+const log = serviceRegistry.logger('console');
+const cache = serviceRegistry.cache('memory');
+const dataservice = serviceRegistry.dataService('memory');
+const filing = serviceRegistry.filing('local');
+const queue = serviceRegistry.queue('memory');
+const scheduling = serviceRegistry.scheduling('memory');
+const searching = serviceRegistry.searching('memory');
+const measuring = serviceRegistry.measuring('memory');
+const notifying = serviceRegistry.notifying('memory');
+const worker = serviceRegistry.working('memory');
+const workflow = serviceRegistry.workflow('memory');
+const authservice = serviceRegistry.authservice('memory');
+
+// Launch the application public folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+server.listen(PORT, () => {
+  log.info(`Nooblyjs wiki running on port ${PORT}`);
+  log.info(`Socket.IO server initialized`);
+});
