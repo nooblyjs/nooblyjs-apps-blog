@@ -17,10 +17,6 @@ module.exports = (options, eventEmitter, services) => {
   const app = options.app;
   const { logger } = services;
 
-  if (!app) {
-    throw new Error('Blog views require an Express application instance.');
-  }
-
   const log = logger || {
     info: console.log.bind(console, '[blog:view]'),
     error: console.error.bind(console, '[blog:view]')

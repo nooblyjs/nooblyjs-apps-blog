@@ -54,5 +54,4 @@ blog(app, server, eventEmitter, serviceRegistry,{});
 
 server.listen(PORT, () => {
   log.info(`Nooblyjs Blog running on port ${PORT}`);
-  log.info(`Socket.IO server initialized`);
 });
