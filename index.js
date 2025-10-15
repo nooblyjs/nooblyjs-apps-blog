@@ -27,25 +27,20 @@ module.exports = (app, server, eventEmitter, serviceRegistry, options) => {
   
   const express = require('express');
   const path = require('path');
-
-  const dataDirectory = options.dataDirectory || './.application/'
-  const filesDir = options.filesDir || './.application/wiki-files'
-  const cacheProvider = options.filesDir || 'memory'
-  const filerProvider = options.filesDir || 'local'
-  const loggerProvider = options.filesDir || 'console'
-  const queueProvider = options.filesDir || 'memory'
-  
-  const filing = serviceRegistry.filing(filerProvider, { baseDir: filesDir});
-  const cache = serviceRegistry.cache(cacheProvider);
-  const logger = serviceRegistry.logger(loggerProvider);
-  const queue = serviceRegistry.queue(queueProvider);
-
+ 
+  const logger = serviceRegistry.logger('console');  
+  const cache = serviceRegistry.cache('memory');
+  const queue = serviceRegistry.queue('memory');
+  const filing = serviceRegistry.filing('local');
+  const dataService = serviceRegistry.dataService('memory');
+  const search = serviceRegistry.searching('memory');
+  const measuring = serviceRegistry.measuring('memory');
 
   // Register routes and views
   options.app = app
 
-  Routes(options, eventEmitter, { filing, cache, logger, queue });
-  Views(options, eventEmitter, { filing, cache, logger, queue });
+  Routes(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring });
+  Views(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring });
 
   // Serve README.md from root directory
   app.get('/applications/blog/README.md', (req, res) => {
@@ -53,4 +48,3 @@ module.exports = (app, server, eventEmitter, serviceRegistry, options) => {
   });
 
 }
-

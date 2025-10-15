@@ -2,7 +2,7 @@
 
 ## 1. Product Overview
 - Build a Medium-style publishing platform targeted at independent writers and small teams.
-- Deliver an API-first backend on native Node.js (no frameworks that abstract the HTTP layer) exposing JSON endpoints.
+- Deliver an API-first backend on native Node.js (no frameworks that abstract the HTTP layer) exposing JSON endpoints while leveraging the NooblyJS Core service registry for cross-cutting capabilities.
 - Provide a Bootstrap 5 powered client UI that consumes the public API via client-side JavaScript (ES modules) with Bootstrap Icons for visual affordances.
 - Support responsive, accessible reading and writing experiences without using React or other component frameworks.
 
@@ -84,19 +84,25 @@
 ## 7. API-First Architecture
 
 ### 7.1 Architectural Principles
-- Native Node.js `http` module with lightweight routing layer (custom or minimal library) to keep control over request lifecycle.
-- Strict separation between API services and static asset delivery (posts consumed only via API for client and third parties).
+- Bootstrap the platform with NooblyJS Core's `serviceRegistry`, providing dependency injection, provider pattern, and event-driven coordination across services.
+- Maintain a native Node.js `http` server as the entry point; bridge requests into the registry through a thin compatibility layer so we preserve low-level control while reusing accelerator middleware.
+- Separate public JSON APIs (`/v1/...`) from accelerator service endpoints (`/services/...`) and static asset delivery to keep clear boundaries.
 - Use JSON:API-style conventions: consistent envelope `{ data, meta, errors }`, pagination via `page` and `pageSize`.
-- Input validation using JSON Schema per endpoint; responses typed and versioned (`/v1` prefix).
-- Authentication via bearer tokens in Authorization header for API clients; session cookies for browser clients hitting the same endpoints.
-- Document API with OpenAPI 3.1 spec stored in repo (`docs/api/openapi.yaml`) and auto-generated HTML docs.
+- Input validation using JSON Schema per endpoint; responses typed and versioned (`/v1` prefix) with schema references published in the NooblyJS Core documentation portal.
+- Authentication via bearer tokens in Authorization header for API clients; session cookies for browser clients hitting the same endpoints, wired through the registry's `authservice`.
+- Document API with OpenAPI 3.1 spec stored in repo (`docs/api/openapi.yaml`) and auto-generated HTML docs, synchronized with the registry catalog.
 
-### 7.2 Key Services
-- Auth Service: registration, login, tokens, roles.
-- Content Service: posts, drafts, tags, media storage adapter.
-- Engagement Service: comments, claps, bookmarks, notifications.
-- Admin Service: moderation, analytics aggregation, audit logging.
-- Search Service: text index (initially PostgreSQL full-text; future Elasticsearch integration).
+### 7.2 NooblyJS Core Service Integration
+- **Initialization:** `serviceRegistry.initialize(app, { apiKeys, requireApiKey, excludePaths })` invoked during bootstrap; API keys required for `/services/...` endpoints, optional for public `/v1/...` routes.
+- **Caching:** leverage `serviceRegistry.cache('redis')` for session tokens, feed fragments, and rate-limit counters; fallback to `memory` in local dev.
+- **Data storage:** implement a custom `dataservice` provider backed by PostgreSQL for strong relational guarantees; keep `memory` provider for ephemeral test fixtures.
+- **Authentication:** use `authservice` provider (`passport` variant) to coordinate email/password, OAuth, and session management.
+- **File & media:** use `filing` service (`s3` provider in production, `local` in dev) for cover images and inline assets, wired to CDN invalidation hooks.
+- **Messaging & jobs:** combine `queueing` (BullMQ-backed provider) and `scheduling` services for background tasks such as email digests, scheduled publishes, and analytics aggregation.
+- **Observability:** connect `logging` (`console` provider writing structured logs) and `measuring` (`memory` or external API) to export metrics to Prometheus.
+- **Search:** start with `searching('memory')` for metadata indexing, with roadmap to plug in an external search provider using the same interface.
+- **Workflow & moderation:** configure `workflow` service to orchestrate review queues and moderation escalations by chaining data, notifying, and working services.
+- **Service endpoints:** expose administrative utilities (health, cache inspection, metrics snapshots) via `/services/{service}/{provider}/...` routes secured by API keys.
 
 ### 7.3 API Endpoints (v1)
 - `POST /v1/auth/register`, `POST /v1/auth/login`, `POST /v1/auth/logout`.
@@ -120,6 +126,7 @@
 - Standard error envelope `{ errors: [{ code, message, field?, details? }] }`.
 - HTTP status conventions: 200/201 success, 400 validation, 401 unauthenticated, 403 unauthorized, 404 missing, 409 conflict (duplicate slug), 429 rate limit, 500 server error.
 - Rate limiting headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After`.
+- Mirror NooblyJS Core error codes (`MISSING_API_KEY`, `INVALID_API_KEY`, etc.) for consistency across `/services/...` and `/v1/...` responses, with translation layer to human-readable messages.
 
 ### 7.5 Versioning Strategy
 - Path-based API versioning (`/v1/...`), with deprecation headers `Sunset` and `Deprecation` when versions phase out.
@@ -157,14 +164,16 @@
   - Form validation leveraging Bootstrap validation patterns and server-side error displays.
 
 ## 10. Backend Technical Overview
-- Node.js LTS (18+); no Express, rely on native `http`/`https` server with router middleware pattern.
-- Database: PostgreSQL 14 via `pg` library.
-- ORM/Query builder: lightweight (e.g., `postgres` npm) or custom query layer to keep control.
-- Caching: Redis for session and feed caching.
-- Background jobs: Node worker using BullMQ (Redis-backed) for email sends, scheduled publishes, analytics aggregation.
-- File storage: Initially local disk or S3-compatible service (configurable provider abstraction).
-- Logging: pino (JSON logs) streamed to stdout, integrated with monitoring.
-- Testing: Node `node:test` or Jest for unit/integration; supertest-like utility may be custom since no Express.
+- Node.js LTS (18+) running a native `http`/`https` server that forwards requests into NooblyJS Core's Express-compatible bridge; preserves full control over low-level networking while gaining accelerator middleware.
+- NooblyJS Core `serviceRegistry` singleton bootstrapped at startup; configuration pulled from environment-driven manifest for provider selection and API key enforcement.
+- Database: PostgreSQL 14 accessed through a custom `dataservice` provider using the `pg` library and SQL templates; ensures transactional guarantees and leverages registry lifecycle hooks.
+- ORM/Query builder: minimalist SQL helper layer (e.g., `postgres` or hand-rolled) wrapped by repository modules injected via `serviceRegistry.dataService('postgres')`.
+- Caching: Redis provider registered via `serviceRegistry.cache('redis')` for sessions, rate limiting, and feed caching; TTL policies managed centrally.
+- Background jobs: BullMQ-backed workers integrated through `queueing('redis')` and `working('memory')` providers, with scheduling orchestrated by `scheduling`.
+- File storage: `filing('s3')` for production cover assets and `filing('local')` for development/test; hooks trigger CDN purges and generate signed URLs.
+- Logging: `logging('console')` providing structured (pino-compatible) JSON logs with correlation IDs; forwarded to monitoring stack.
+- Metrics & telemetry: `measuring` service emits counters/histograms exported through Prometheus endpoint; event emitter used for custom analytics.
+- Testing: Node `node:test` or Jest for unit/integration; harness spins up an in-memory `serviceRegistry` with `memory` providers for deterministic tests.
 
 ## 11. Non-Functional Requirements
 - **Performance:** API response median < 150ms; use caching for feeds, compress responses (gzip/brotli).
@@ -175,16 +184,16 @@
 - **Internationalization:** English default; allow translation-ready strings client-side (deferred full i18n).
 
 ## 12. Telemetry & Monitoring
-- Request logging with correlation IDs.
-- Metrics via Prometheus endpoint (`/v1/status/metrics`), capturing latency, error rates, job queues.
-- Client analytics using first-party script sending events via `/v1/analytics/events`.
-- Error tracking through Sentry-compatible endpoint or similar service.
+- Request logging with correlation IDs emitted through `logging('console')` and aggregated by centralized monitoring.
+- Metrics exported from the `measuring` service via Prometheus endpoint (`/v1/status/metrics`), capturing latency, error rates, job queues, service registry health.
+- Client analytics using first-party script sending events via `/v1/analytics/events`, processed by queueing workers and stored through the data service.
+- Error tracking through Sentry-compatible endpoint or similar service with hooks registered on the service registry's global event emitter.
 
 ## 13. Release Plan
-- **Milestone 1:** Core API skeleton, authentication, basic post CRUD, public read endpoints, Bootstrap static pages consuming demo data.
-- **Milestone 2:** Draft editor with autosave, tagging, publishing workflow, reader-facing feed, basic analytics capture.
-- **Milestone 3:** Comments, claps, bookmarks, notifications, moderation tooling.
-- **Milestone 4:** Analytics dashboards, email digests, offline caching, performance polish, documentation.
+- **Milestone 1:** Initialize NooblyJS Core registry with memory providers, wire authentication, establish core API skeleton, deliver public read endpoints, and ship Bootstrap static pages consuming mock data.
+- **Milestone 2:** Swap in Redis/PostgreSQL-backed providers, build draft editor with autosave, tagging, publishing workflow, reader-facing feed, and basic analytics capture.
+- **Milestone 3:** Enable comments, claps, bookmarks, notifications, moderation tooling, and expose relevant `/services/...` admin utilities with API key gating.
+- **Milestone 4:** Launch analytics dashboards, email digests, offline caching, performance polish, documentation, and finalize provider hardening for GA.
 - Beta launch with selected authors, gather feedback, stabilize for GA.
 
 ## 14. Risks & Mitigations
@@ -192,9 +201,10 @@
 - **API auth & rate limits:** Implement thorough testing and monitoring; provide detailed error messages and HATEOAS links to documentation.
 - **Scalability:** Use load testing before GA; design caching strategy early.
 - **Content moderation load:** Provide tooling for admins and escalation path; integrate third-party moderation (future) if needed.
-- **No framework server implementation:** Enforce rigorous code reviews and automated tests to avoid regressions in custom routing layer.
+- **Custom NooblyJS Core providers:** Harden the PostgreSQL-backed `dataservice` provider and Express bridge with contract tests to ensure parity with memory providers and prevent regressions during accelerator upgrades.
 
 ## 15. Dependencies
+- `noobly-core` npm package (service registry accelerator) and provider configuration files.
 - PostgreSQL instance, Redis cache, SMTP provider, optional S3-compatible storage.
 - CDN for static assets (Bootstrap, icons, client scripts) with self-hosted fallback.
 - CI pipeline (GitHub Actions) for tests, linting, and deployment scripts.
