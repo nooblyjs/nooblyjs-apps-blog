@@ -26,7 +26,7 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
 app.use(bodyParser.json({ limit: '100mb' }));
 
 // Initialise event system
-const eventEmitter = new EventEmitter()
+const eventEmitter = new EventEmitter()  
 
 // Initiate the service Registry
 const serviceRegistry = require('nooblyjs-core');
@@ -48,7 +48,11 @@ const authservice = serviceRegistry.authservice('memory');
 // Launch the application public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
+const blog = require('./index.js');
+blog(app, server, eventEmitter, serviceRegistry,{});
+
+
 server.listen(PORT, () => {
-  log.info(`Nooblyjs wiki running on port ${PORT}`);
+  log.info(`Nooblyjs Blog running on port ${PORT}`);
   log.info(`Socket.IO server initialized`);
 });
