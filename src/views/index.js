@@ -15,7 +15,7 @@ const STATIC_PATH = `${VIEW_BASE_PATH}/assets`;
  */
 module.exports = (options, eventEmitter, services) => {
   const app = options.app;
-  const { logger } = services;
+  const { logger, servicesAuthMiddleware } = services;
 
   const log = logger || {
     info: console.log.bind(console, '[blog:view]'),
@@ -28,13 +28,22 @@ module.exports = (options, eventEmitter, services) => {
   // Serve compiled client assets (vanilla JS modules, helpers)
   app.use(STATIC_PATH, express.static(staticRoot));
 
-  // HTML entrypoint for the blog interface
+  // HTML entrypoints for the blog interfaces
   const sendIndex = (_req, res) => {
     res.sendFile(path.join(viewRoot, 'index.html'));
   };
 
+  const sendAuthor = (_req, res) => {
+    res.sendFile(path.join(viewRoot, 'author.html'));
+  };
+
+  const protect = typeof servicesAuthMiddleware === 'function' ? servicesAuthMiddleware : (_req, _res, next) => next();
+
   app.get(VIEW_BASE_PATH, sendIndex);
   app.get(`${VIEW_BASE_PATH}/`, sendIndex);
+  app.get(`${VIEW_BASE_PATH}/author`, protect, sendAuthor);
+  app.get(`${VIEW_BASE_PATH}/author/`, protect, sendAuthor);
+  app.get('/appplications/blog/author', (_req, res) => res.redirect(`${VIEW_BASE_PATH}/author`));
 
   // Provide a lightweight manifest endpoint for client bootstrapping
   app.get(`${VIEW_BASE_PATH}/manifest.json`, (_req, res) => {
@@ -49,5 +58,5 @@ module.exports = (options, eventEmitter, services) => {
     });
   });
 
-  log.info('Blog views registered', { basePath: VIEW_BASE_PATH, assets: STATIC_PATH });
+  log.info('Blog views registered', { basePath: VIEW_BASE_PATH, assets: STATIC_PATH, authorPath: `${VIEW_BASE_PATH}/author` });
 };

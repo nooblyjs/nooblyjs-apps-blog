@@ -6,25 +6,31 @@
 
   const API_BASE = '/applications/blog/api';
 
+  const DEFAULT_LATEST_HEADING = 'Latest posts';
+
   const state = {
     feed: null,
     posts: new Map(),
-    currentPostId: null
+    currentPostId: null,
+    latestHeadingHtml: DEFAULT_LATEST_HEADING,
+    latestHeadingHtmlBeforeReading: null
   };
 
   const elements = {
     featured: document.getElementById('featured'),
+    heroLayout: document.querySelector('.blog-layout-hero'),
     latestHeading: document.getElementById('latest-heading'),
     latestList: document.getElementById('latest-list'),
     trendingList: document.getElementById('trending-list'),
     topicsList: document.getElementById('topics-list'),
     draftList: document.getElementById('draft-list'),
     refreshFeedBtn: document.getElementById('refresh-feed-btn'),
+    searchForm: document.getElementById('post-search-form'),
     searchInput: document.getElementById('post-search-input'),
     searchBtn: document.getElementById('search-btn'),
     createPostForm: document.getElementById('create-post-form'),
     createPostModal: document.getElementById('createPostModal'),
-    readPostModal: document.getElementById('readPostModal'),
+    readPostPanel: document.getElementById('read-post-panel'),
     readPostTitle: document.getElementById('read-post-title'),
     readPostMeta: document.getElementById('read-post-meta'),
     readPostCover: document.getElementById('read-post-cover'),
@@ -39,7 +45,6 @@
   };
 
   const modalRefs = {
-    read: null,
     create: null
   };
 
@@ -150,6 +155,15 @@
     `;
   }
 
+  function setLatestHeading(html, { remember = true } = {}) {
+    if (remember) {
+      state.latestHeadingHtml = html;
+    }
+    if (elements.latestHeading) {
+      elements.latestHeading.innerHTML = html;
+    }
+  }
+
   function hydratePosts(collections = []) {
     collections.flat().forEach((post) => {
       if (post && post.id) {
@@ -191,11 +205,20 @@
   }
 
   function renderFeed() {
+    const isReading = state.currentPostId && state.posts.has(state.currentPostId);
+    if (!isReading) {
+      setLatestHeading(state.latestHeadingHtml, { remember: false });
+    }
     renderFeatured(state.feed?.featured?.[0]);
     renderLatest(state.feed?.latest || []);
     renderTrending(state.feed?.trending || []);
     renderTopics(state.feed?.tags || []);
     renderDrafts(state.feed?.drafts || []);
+    if (isReading) {
+      renderExpandedPost(state.posts.get(state.currentPostId));
+    } else if (state.currentPostId) {
+      hideExpandedPost();
+    }
   }
 
   function renderFeatured(post) {
@@ -250,8 +273,8 @@
         const stats = post.stats || {};
         return `
           <article class="card shadow-sm" data-post-id="${escapeHtml(post.id)}">
-            <div class="card-body">
-              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 text-muted small">
+            <div class="card-body d-flex flex-column gap-3">
+              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 text-muted small">
                 <span>${escapeHtml(buildPostMeta(post))}</span>
                 <span class="d-flex align-items-center gap-3">
                   <span><i class="bi bi-eye me-1"></i>${Number(stats.views || 0)}</span>
@@ -259,22 +282,22 @@
                   <span><i class="bi bi-bookmark me-1"></i>${Number(stats.bookmarks || 0)}</span>
                 </span>
               </div>
-              <h3 class="h4 mb-2">
-                <a href="#" class="text-decoration-none" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
-                  ${escapeHtml(post.title)}
-                </a>
-              </h3>
-              ${post.subtitle ? `<p class="text-muted mb-2">${escapeHtml(post.subtitle)}</p>` : ''}
-              <p class="mb-3">${escapeHtml(post.excerpt || '')}</p>
-              <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                <div class="d-flex gap-2 flex-wrap">
-                  ${tags
-                    .map((tag) => `<span class="badge bg-primary-subtle text-primary-emphasis">${escapeHtml(tag)}</span>`)
-                    .join('')}
-                </div>
-                <button class="btn btn-outline-primary btn-sm" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
-                  Read
-                </button>
+              <div>
+                <h3 class="h4 mb-2">
+                  <a href="#" class="text-decoration-none" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
+                    ${escapeHtml(post.title)}
+                  </a>
+                </h3>
+                ${post.subtitle ? `<p class="text-muted mb-2">${escapeHtml(post.subtitle)}</p>` : ''}
+                <p class="mb-3">${escapeHtml(post.excerpt || '')}</p>
+              </div>
+              <button class="btn btn-primary align-self-start" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
+                <i class="bi bi-journal-text me-2"></i>Read story
+              </button>
+              <div class="d-flex gap-2 flex-wrap">
+                ${tags
+                  .map((tag) => `<span class="badge bg-primary-subtle text-primary-emphasis">${escapeHtml(tag)}</span>`)
+                  .join('')}
               </div>
             </div>
           </article>
@@ -411,22 +434,87 @@
       const { data: post } = await request(`/posts/${encodeURIComponent(postId)}`);
       state.currentPostId = post.id;
       syncPost(post);
-      renderPostModal(post);
+      if (elements.commentForm) {
+        elements.commentForm.reset();
+        elements.commentForm.classList.remove('was-validated');
+      }
+      renderExpandedPost(post);
+      focusExpandedPost();
       await loadComments(post.id);
-      ensureReadModal().show();
     } catch (error) {
       showToast(error.message, 'danger', 'Unable to load story');
     }
   }
 
-  function renderPostModal(post) {
+  function renderExpandedPost(post) {
+    if (!elements.readPostPanel) return;
+    elements.readPostPanel.classList.remove('d-none');
+    elements.readPostPanel.setAttribute('data-post-id', post.id);
     elements.readPostTitle.textContent = post.title || 'Untitled story';
     elements.readPostMeta.textContent = buildPostMeta(post);
-    elements.readPostCover.innerHTML = post.coverImage
-      ? `<img src="${escapeHtml(post.coverImage)}" class="img-fluid rounded" alt="${escapeHtml(post.title)}">`
-      : '';
+    if (post.coverImage) {
+      elements.readPostCover.innerHTML = `<img src="${escapeHtml(post.coverImage)}" class="img-fluid rounded" alt="${escapeHtml(
+        post.title
+      )}">`;
+      elements.readPostCover.classList.remove('d-none');
+    } else {
+      elements.readPostCover.innerHTML = '';
+      elements.readPostCover.classList.add('d-none');
+    }
     elements.readPostContent.innerHTML = markdownToHtml(post.content || post.excerpt || '');
     renderActionButtons(post);
+    if (elements.latestList) {
+      elements.latestList.classList.add('d-none');
+    }
+    elements.heroLayout?.classList.add('d-none');
+    if (!state.latestHeadingHtmlBeforeReading) {
+      state.latestHeadingHtmlBeforeReading = elements.latestHeading
+        ? elements.latestHeading.innerHTML
+        : state.latestHeadingHtml;
+    }
+    setLatestHeading(`Reading “${escapeHtml(post.title || 'Untitled story')}”`, { remember: false });
+  }
+
+  function focusExpandedPost() {
+    if (!elements.readPostPanel) return;
+    const rect = elements.readPostPanel.getBoundingClientRect();
+    const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (!isVisible) {
+      elements.readPostPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (elements.commentAuthor) {
+      try {
+        elements.commentAuthor.focus({ preventScroll: true });
+      } catch (_) {
+        elements.commentAuthor.focus();
+      }
+    }
+  }
+
+  function hideExpandedPost() {
+    if (!elements.readPostPanel) return;
+    elements.readPostPanel.classList.add('d-none');
+    elements.readPostPanel.removeAttribute('data-post-id');
+    elements.readPostTitle.textContent = '';
+    elements.readPostMeta.textContent = '';
+    elements.readPostCover.innerHTML = '';
+    elements.readPostCover.classList.add('d-none');
+    elements.readPostContent.innerHTML = '';
+    elements.readPostActions.innerHTML = '';
+    elements.readPostComments.innerHTML = '';
+    elements.readPostCommentCount.textContent = '0 comments';
+    if (elements.commentForm) {
+      elements.commentForm.reset();
+      elements.commentForm.classList.remove('was-validated');
+    }
+    if (elements.latestList) {
+      elements.latestList.classList.remove('d-none');
+    }
+    elements.heroLayout?.classList.remove('d-none');
+    const restoredHeading = state.latestHeadingHtmlBeforeReading || state.latestHeadingHtml || DEFAULT_LATEST_HEADING;
+    setLatestHeading(restoredHeading, { remember: false });
+    state.latestHeadingHtmlBeforeReading = null;
+    state.currentPostId = null;
   }
 
   function renderActionButtons(post) {
@@ -446,11 +534,17 @@
   }
 
   async function loadComments(postId) {
+    if (!postId) return;
     setLoading(elements.readPostComments, 'Loading comments…');
+    if (elements.readPostCommentCount) {
+      elements.readPostCommentCount.textContent = 'Loading…';
+    }
     try {
       const { data: comments } = await request(`/posts/${encodeURIComponent(postId)}/comments`);
+      if (state.currentPostId !== postId) return;
       renderComments(Array.isArray(comments) ? comments : []);
     } catch (error) {
+      if (state.currentPostId !== postId) return;
       setError(elements.readPostComments, `Unable to load comments: ${error.message}`);
       elements.readPostCommentCount.textContent = '0 comments';
     }
@@ -484,13 +578,6 @@
       .join('');
 
     elements.readPostCommentCount.textContent = `${comments.length} comment${comments.length === 1 ? '' : 's'}`;
-  }
-
-  function ensureReadModal() {
-    if (!modalRefs.read) {
-      modalRefs.read = new bootstrap.Modal(elements.readPostModal, { focus: true });
-    }
-    return modalRefs.read;
   }
 
   function ensureCreateModal() {
@@ -595,8 +682,9 @@
 
   async function runSearch(term) {
     const query = term.trim();
+    hideExpandedPost();
     if (!query) {
-      elements.latestHeading.textContent = 'Latest posts';
+      setLatestHeading(DEFAULT_LATEST_HEADING);
       renderLatest(state.feed?.latest || []);
       return;
     }
@@ -606,7 +694,7 @@
       const { data } = await request(`/search?q=${encodeURIComponent(query)}`);
       const results = Array.isArray(data) ? data : [];
       hydratePosts([results]);
-      elements.latestHeading.innerHTML = `Search results for “${escapeHtml(query)}”`;
+      setLatestHeading(`Search results for “${escapeHtml(query)}”`);
       renderLatest(results);
       if (!results.length) {
         elements.latestList.innerHTML = `
@@ -637,12 +725,22 @@
       event.preventDefault();
       elements.searchInput.value = tag;
       runSearch(tag);
+    } else if (action === 'close-expanded') {
+      event.preventDefault();
+      hideExpandedPost();
     }
   }
 
   function registerEvents() {
     elements.refreshFeedBtn?.addEventListener('click', () => loadFeed({ announce: true }));
-    elements.searchBtn?.addEventListener('click', () => runSearch(elements.searchInput.value));
+    elements.searchForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      runSearch(elements.searchInput.value);
+    });
+    elements.searchBtn?.addEventListener('click', (event) => {
+      event.preventDefault();
+      runSearch(elements.searchInput.value);
+    });
     elements.searchInput?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
@@ -652,11 +750,6 @@
     elements.createPostForm?.addEventListener('submit', handleCreatePost);
     elements.commentForm?.addEventListener('submit', handleCommentSubmit);
     document.addEventListener('click', handleGlobalClick);
-    document.addEventListener('shown.bs.modal', (event) => {
-      if (event.target === elements.readPostModal) {
-        elements.commentAuthor.focus();
-      }
-    });
   }
 
   registerEvents();

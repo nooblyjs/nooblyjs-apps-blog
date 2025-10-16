@@ -17,13 +17,33 @@ body {
   backdrop-filter: blur(8px);
 }
 
-.navbar .input-group .form-control {
-  border-radius: 0;
-  border-color: rgba(255, 255, 255, 0.5);
+.navbar-search {
+  min-width: 0;
 }
 
-.navbar .input-group-text {
-  border-color: rgba(255, 255, 255, 0.5);
+.navbar-search .input-group {
+  width: 100%;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background-color: #fff;
+  border: 1px solid rgba(15, 35, 64, 0.12);
+  box-shadow: 0 8px 20px rgba(15, 35, 64, 0.1);
+}
+
+.navbar-search .form-control {
+  border: none;
+  background-color: transparent;
+  color: #0f2340;
+}
+
+.navbar-search .form-control::placeholder {
+  color: rgba(15, 35, 64, 0.65);
+}
+
+.navbar-search .input-group-text {
+  border: none;
+  background-color: transparent;
+  color: rgba(15, 35, 64, 0.55);
 }
 
 .card {
@@ -145,16 +165,65 @@ body {
   font-weight: 600;
 }
 
+.blog-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.blog-layout-hero {
+  gap: 1.5rem;
+}
+
+.blog-expanded-panel {
+  border-radius: var(--blog-radius);
+  overflow: hidden;
+}
+
+.blog-expanded-panel #read-post-cover img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: var(--blog-radius);
+}
+
+.blog-expanded-panel .blog-article p:last-child {
+  margin-bottom: 0;
+}
+
+.blog-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.blog-sidebar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (min-width: 992px) {
+  :root {
+    --blog-sidebar-width: clamp(320px, 32vw, 420px);
+  }
+
+  .blog-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .blog-layout-hero {
+    align-items: stretch;
+  }
+
+  .blog-sidebar {
+    flex: 0 0 var(--blog-sidebar-width);
+    width: var(--blog-sidebar-width);
+    max-width: var(--blog-sidebar-width);
+  }
+}
+
 @media (max-width: 992px) {
-  .navbar .input-group {
+  .navbar-search {
     width: 100%;
-  }
-
-  .navbar .input-group .form-control {
-    border-radius: 0 0.5rem 0.5rem 0;
-  }
-
-  .navbar .input-group-text {
-    border-radius: 0.5rem 0 0 0.5rem;
   }
 }

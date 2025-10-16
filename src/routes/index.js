@@ -1,5 +1,7 @@
 'use strict';
 
+const createFilePostStore = require('../services/filePostStore');
+
 const API_BASE_PATH = '/applications/blog/api';
 const CONTAINERS = {
   POSTS: 'blog_posts',
@@ -127,7 +129,7 @@ function sendError(res, status, code, message, details) {
  */
 module.exports = (options, eventEmitter, services) => {
   const app = options.app;
-  const { dataService, cache, logger, search } = services;
+  const { dataService, cache, logger, search, filing } = services;
 
   if (!app) {
     throw new Error('Blog routes require an Express application instance.');
@@ -137,8 +139,29 @@ module.exports = (options, eventEmitter, services) => {
     throw new Error('Blog routes require the noobly-core dataService.');
   }
 
+  if (!filing) {
+    throw new Error('Blog routes require the filing service.');
+  }
+
   const log = buildLogger(logger);
   const provider = dataService.provider;
+
+  const postStore = createFilePostStore({
+    filing,
+    logger: log,
+    toSlug,
+    buildExcerpt,
+    estimateReadTime,
+    normalizeTags,
+    normalizeAuthor
+  });
+
+  const postsReady = postStore
+    .ready()
+    .catch((error) => {
+      log.error('Failed to initialize post storage', { error: error.message });
+      throw error;
+    });
 
   /**
    * Ensures a container exists on the data service.
@@ -182,6 +205,10 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<Array<Object>>}
    */
   const listRecords = async (container) => {
+    if (container === CONTAINERS.POSTS) {
+      await postsReady;
+      return postStore.listAll();
+    }
     await containersReady;
     return Array.from(getContainerMap(container).values());
   };
@@ -193,6 +220,10 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<Object|null>}
    */
   const getRecord = async (container, id) => {
+    if (container === CONTAINERS.POSTS) {
+      await postsReady;
+      return postStore.get(id);
+    }
     await containersReady;
     const record = getContainerMap(container).get(id);
     return record || null;
@@ -205,6 +236,10 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<Object>}
    */
   const createRecord = async (container, payload) => {
+    if (container === CONTAINERS.POSTS) {
+      await postsReady;
+      return postStore.create(payload);
+    }
     await containersReady;
     const now = new Date().toISOString();
     const record = { ...payload, createdAt: payload.createdAt || now, updatedAt: payload.updatedAt || now };
@@ -223,6 +258,10 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<Object|null>}
    */
   const updateRecord = async (container, id, updater) => {
+    if (container === CONTAINERS.POSTS) {
+      await postsReady;
+      return postStore.update(id, updater);
+    }
     await containersReady;
     const containerMap = getContainerMap(container);
     const existing = containerMap.get(id);
@@ -242,6 +281,10 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<boolean>}
    */
   const deleteRecord = async (container, id) => {
+    if (container === CONTAINERS.POSTS) {
+      await postsReady;
+      return postStore.remove(id);
+    }
     await containersReady;
     const success = await dataService.remove(container, id);
     if (success) {
@@ -381,76 +424,7 @@ module.exports = (options, eventEmitter, services) => {
    * @return {Promise<void>}
    */
   const seedContent = async () => {
-    const posts = await listRecords(CONTAINERS.POSTS);
-    if (posts.length > 0) {
-      return;
-    }
-
-    const now = new Date();
-    const seedPosts = [
-      {
-        title: 'Welcome to NooblyJS Blog',
-        subtitle: 'A modern publishing experience built on the NooblyJS Core accelerator',
-        content: `Building a publication-quality blog no longer requires stitching together dozens of libraries. 
-With NooblyJS Core we get data storage, caching, search, and observability out of the box.
-
-This blog showcases how an API-first publishing workflow and a Bootstrap-powered client can deliver a Medium-like experience with minimal friction.
-
-Highlights of this build:
-- API-first Node.js backend with native routing
-- Bootstrap 5 interface that feels at home on any device
-- NooblyJS services for data, caching, search, queues, and metrics`,
-        author: {
-          name: 'NooblyJS Core Team',
-          handle: 'core-team',
-          avatar: 'https://avatars.dicebear.com/api/initials/NJ.svg'
-        },
-        tags: ['NooblyJS', 'Architecture', 'Product Updates'],
-        coverImage: 'https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=1400&q=80',
-        status: 'published',
-        publishedAt: new Date(now.getTime() - 3 * ONE_MINUTE).toISOString(),
-        stats: {
-          views: 128,
-          claps: 32,
-          bookmarks: 18,
-          comments: 4
-        }
-      },
-      {
-        title: 'Designing an API-First Publishing Workflow',
-        subtitle: 'From drafting to distribution—why API consistency matters',
-        content: `An API-first mindset ensures that web, mobile, and partner experiences stay in sync.
-
-In NooblyJS Blog every feature—from drafts to claps—is an HTTP endpoint. The Bootstrap client consumes those APIs the same way future integrations will.
-
-Key practices:
-1. Version every endpoint under /v1
-2. Use consistent response envelopes
-3. Document schemas alongside code with OpenAPI
-4. Keep presentation concerns out of the API layer`,
-        author: {
-          name: 'Leah Ndlovu',
-          handle: 'leah-n',
-          avatar: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=240&q=80'
-        },
-        tags: ['API Design', 'Best Practices', 'Editorial'],
-        coverImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1400&q=80',
-        status: 'published',
-        publishedAt: new Date(now.getTime() - ONE_MINUTE).toISOString(),
-        stats: {
-          views: 92,
-          claps: 21,
-          bookmarks: 9,
-          comments: 2
-        }
-      }
-    ];
-
-    for (const seed of seedPosts) {
-      await createPostRecord(seed);
-    }
-    await invalidateFeedCache();
-    log.info('Seeded initial blog posts');
+    await postsReady;
   };
 
   /**

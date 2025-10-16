@@ -35,12 +35,14 @@ module.exports = (app, server, eventEmitter, serviceRegistry, options) => {
   const dataService = serviceRegistry.dataService('memory');
   const search = serviceRegistry.searching('memory');
   const measuring = serviceRegistry.measuring('memory');
+  const authService = serviceRegistry.authservice('memory');
+  const servicesAuthMiddleware = serviceRegistry.servicesAuthMiddleware || ((req, res, next) => next());
 
   // Register routes and views
   options.app = app
 
-  Routes(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring });
-  Views(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring });
+  Routes(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring, authService });
+  Views(options, eventEmitter, { filing, cache, logger, queue, dataService, search, measuring, authService, servicesAuthMiddleware });
 
   // Serve README.md from root directory
   app.get('/applications/blog/README.md', (req, res) => {
