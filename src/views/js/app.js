@@ -930,7 +930,7 @@
           mainContent.parentNode.insertBefore(bannerContainer, mainContent);
         }
       }
-      bannerContainer.innerHTML = `<img src="${escapeHtml(settings.bannerImage)}" alt="Banner" class="d-block" style="width: 100%; max-height: 400px; object-fit: cover; display: block; margin: 0; padding: 0;">`;
+      bannerContainer.innerHTML = `<img src="${escapeHtml(settings.bannerImage)}" alt="Banner" class="d-block" style="width: 100%; max-height: 150px; object-fit: cover; display: block; margin: 0; padding: 0;">`;
     } else {
       // Remove banner if no image is set
       const existingBanner = document.getElementById('blog-banner');
