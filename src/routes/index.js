@@ -7,7 +7,8 @@ const VIEW_BASE_PATH = '/applications/blog';
 const CONTAINERS = {
   POSTS: 'blog_posts',
   COMMENTS: 'blog_comments',
-  BOOKMARKS: 'blog_bookmarks'
+  BOOKMARKS: 'blog_bookmarks',
+  SITE_SETTINGS: 'blog_site_settings'
 };
 
 const CACHE_KEYS = {
@@ -15,6 +16,13 @@ const CACHE_KEYS = {
 };
 
 const ONE_MINUTE = 60 * 1000;
+
+const DEFAULT_SITE_SETTINGS = {
+  title: 'NooblyJS Blog',
+  primaryColor: '#0d6efd',
+  bannerImage: '',
+  key: 'default'
+};
 
 /**
  * Normalizes a string into a URL-friendly slug.
