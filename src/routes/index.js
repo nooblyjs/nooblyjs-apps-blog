@@ -72,6 +72,80 @@ function normalizeTags(tags = []) {
 }
 
 /**
+ * Builds a search document from a post with denormalized text for matching.
+ * @param {Object} post
+ * @return {Object|null}
+ */
+function buildSearchDocument(post) {
+  if (!post || !post.id) return null;
+  const tags = Array.isArray(post.tags) ? [...post.tags] : [];
+  const doc = {
+    id: post.id,
+    title: post.title || '',
+    subtitle: post.subtitle || '',
+    slug: post.slug || '',
+    excerpt: post.excerpt || '',
+    content: post.content || '',
+    coverImage: post.coverImage || null,
+    tags,
+    tagSlugs: Array.isArray(post.tagSlugs) ? [...post.tagSlugs] : tags.map((tag) => toSlug(tag)),
+    author: post.author
+      ? {
+          name: post.author.name || '',
+          handle: post.author.handle || toSlug(post.author.name || ''),
+          avatar: post.author.avatar || null,
+          bio: post.author.bio || null
+        }
+      : null,
+    stats: {
+      views: Number(post.stats?.views || 0),
+      claps: Number(post.stats?.claps || 0),
+      bookmarks: Number(post.stats?.bookmarks || 0),
+      comments: Number(post.stats?.comments || 0)
+    },
+    status: post.status || 'draft',
+    publishedAt: post.publishedAt || null,
+    scheduledFor: post.scheduledFor || null,
+    readTimeMinutes: Number(post.readTimeMinutes || estimateReadTime(post.content || '')),
+    createdAt: post.createdAt || null,
+    updatedAt: post.updatedAt || null,
+    contentFormat: post.contentFormat || 'markdown',
+    seo: post.seo
+      ? {
+          title: post.seo.title || post.title || '',
+          description: post.seo.description || post.excerpt || '',
+          canonicalUrl: post.seo.canonicalUrl || null
+        }
+      : null
+  };
+
+  doc.searchText = [
+    doc.title,
+    doc.subtitle,
+    doc.excerpt,
+    doc.content,
+    tags.join(' '),
+    doc.author?.name || '',
+    doc.author?.handle || ''
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return doc;
+}
+
+/**
+ * Removes search-only metadata from a search document.
+ * @param {Object|null} doc
+ * @return {Object|null}
+ */
+function stripSearchMetadata(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  const { searchText, ...rest } = doc;
+  return rest;
+}
+
+/**
  * Builds a safe default logger when the registry logger is unavailable.
  * @param {Object|undefined} logger
  * @return {{info: Function, warn: Function, error: Function, debug: Function}}
@@ -161,6 +235,21 @@ module.exports = (options, eventEmitter, services) => {
     .catch((error) => {
       log.error('Failed to initialize post storage', { error: error.message });
       throw error;
+    });
+
+  postsReady
+    .then(async () => {
+      if (!search) return;
+      try {
+        const posts = await postStore.listAll();
+        await Promise.allSettled(posts.map((post) => upsertSearchIndex(post)));
+        log.info('Search index warmed with existing posts', { count: posts.length });
+      } catch (error) {
+        log.warn('Failed to warm search index', { error: error.message });
+      }
+    })
+    .catch((error) => {
+      log.warn('Search warmup skipped', { error: error.message });
     });
 
   /**
@@ -311,23 +400,16 @@ module.exports = (options, eventEmitter, services) => {
    */
   const upsertSearchIndex = async (post) => {
     if (!search) return;
-    const payload = {
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      subtitle: post.subtitle,
-      excerpt: post.excerpt,
-      author: post.author?.name,
-      tags: post.tags,
-      summary: [post.title, post.subtitle, post.excerpt, post.author?.name, ...(post.tags || [])].join(' ')
-    };
     try {
       await search.remove(post.id, 'blog-posts');
     } catch (_) {
       // ignore remove errors
     }
+    if (post.status !== 'published') return;
+    const document = buildSearchDocument(post);
+    if (!document) return;
     try {
-      await search.add(post.id, payload, 'blog-posts');
+      await search.add(post.id, document, 'blog-posts');
     } catch (error) {
       log.warn('Failed to index post for search', { postId: post.id, error: error.message });
     }
@@ -572,16 +654,41 @@ module.exports = (options, eventEmitter, services) => {
       }
 
       if (q) {
-        const searchTerm = q.toLowerCase();
-        filtered = filtered.filter((post) => {
-          return (
-            post.title?.toLowerCase().includes(searchTerm) ||
-            post.subtitle?.toLowerCase().includes(searchTerm) ||
-            post.excerpt?.toLowerCase().includes(searchTerm) ||
-            post.author?.name?.toLowerCase().includes(searchTerm) ||
-            (post.tags || []).some((tagValue) => tagValue.toLowerCase().includes(searchTerm))
-          );
-        });
+        const query = q.trim();
+        if (search && typeof search.search === 'function') {
+          try {
+            const results = await search.search(query, 'blog-posts');
+            const matchedIds = new Set(
+              results
+                .map((entry) => entry?.key || entry?.obj?.id || entry?.object?.id || null)
+                .filter((value) => typeof value === 'string' && value.length > 0)
+            );
+            filtered = filtered.filter((post) => matchedIds.has(post.id));
+          } catch (error) {
+            log.warn('Search provider failed, falling back to in-memory filtering', { error: error.message });
+            const searchTerm = query.toLowerCase();
+            filtered = filtered.filter((post) => {
+              return (
+                post.title?.toLowerCase().includes(searchTerm) ||
+                post.subtitle?.toLowerCase().includes(searchTerm) ||
+                post.excerpt?.toLowerCase().includes(searchTerm) ||
+                post.author?.name?.toLowerCase().includes(searchTerm) ||
+                (post.tags || []).some((tagValue) => tagValue.toLowerCase().includes(searchTerm))
+              );
+            });
+          }
+        } else {
+          const searchTerm = query.toLowerCase();
+          filtered = filtered.filter((post) => {
+            return (
+              post.title?.toLowerCase().includes(searchTerm) ||
+              post.subtitle?.toLowerCase().includes(searchTerm) ||
+              post.excerpt?.toLowerCase().includes(searchTerm) ||
+              post.author?.name?.toLowerCase().includes(searchTerm) ||
+              (post.tags || []).some((tagValue) => tagValue.toLowerCase().includes(searchTerm))
+            );
+          });
+        }
       }
 
       filtered.sort((a, b) => {
@@ -945,7 +1052,28 @@ module.exports = (options, eventEmitter, services) => {
 
       if (search && typeof search.search === 'function') {
         const results = await search.search(q.trim(), 'blog-posts');
-        sendJson(res, 200, results.map((entry) => entry.object || entry));
+        const seen = new Set();
+        const matches = [];
+        for (const entry of results) {
+          const raw = entry?.obj || entry?.object || entry;
+          const candidate = stripSearchMetadata(raw);
+          const candidateId = candidate?.id || entry?.key;
+          if (candidate && candidateId && !seen.has(candidateId) && candidate.status === 'published') {
+            seen.add(candidateId);
+            matches.push(candidate);
+            continue;
+          }
+          const fallbackId = candidateId || entry?.key;
+          if (!fallbackId || seen.has(fallbackId)) {
+            continue;
+          }
+          const fallback = await getRecord(CONTAINERS.POSTS, fallbackId);
+          if (fallback && fallback.status === 'published') {
+            seen.add(fallback.id);
+            matches.push(fallback);
+          }
+        }
+        sendJson(res, 200, matches);
         return;
       }
 
