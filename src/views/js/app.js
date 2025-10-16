@@ -807,6 +807,139 @@
     }
   }
 
+  // Settings functionality
+  async function loadAndApplySettings() {
+    try {
+      const { data } = await request('/settings');
+      applySettings(data);
+    } catch (error) {
+      // Silently fail and use defaults if settings not available
+      console.warn('Could not load settings:', error.message);
+    }
+  }
+
+  function applySettings(settings) {
+    if (!settings) return;
+
+    // Update page title
+    document.title = settings.title || 'NooblyJS Blog';
+
+    // Update navbar brand
+    const navbarBrand = document.querySelector('.navbar-brand span');
+    if (navbarBrand) {
+      navbarBrand.textContent = settings.title || 'NooblyJS Blog';
+    }
+
+    // Apply custom styles
+    let styleTag = document.getElementById('custom-blog-styles');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'custom-blog-styles';
+      document.head.appendChild(styleTag);
+    }
+
+    const primaryColor = settings.primaryColor || '#0d6efd';
+    const backgroundColor = settings.backgroundColor || '#ffffff';
+
+    styleTag.textContent = `
+      body, #blog-app, main {
+        background-color: ${backgroundColor} !important;
+      }
+      .navbar.bg-primary, .btn-primary, .badge.bg-primary {
+        background-color: ${primaryColor} !important;
+        border-color: ${primaryColor} !important;
+      }
+      .btn-primary:hover, .btn-primary:focus {
+        background-color: ${primaryColor}dd !important;
+        border-color: ${primaryColor}dd !important;
+      }
+      .text-primary {
+        color: ${primaryColor} !important;
+      }
+      .spinner-border.text-primary {
+        color: ${primaryColor} !important;
+      }
+      .badge.bg-primary-subtle {
+        background-color: ${primaryColor}20 !important;
+      }
+      .badge.text-primary-emphasis {
+        color: ${primaryColor} !important;
+      }
+      .btn-outline-primary {
+        color: ${primaryColor} !important;
+        border-color: ${primaryColor} !important;
+      }
+      .btn-outline-primary:hover {
+        background-color: ${primaryColor} !important;
+        border-color: ${primaryColor} !important;
+        color: #ffffff !important;
+      }
+      .bg-primary-subtle {
+        background-color: ${primaryColor}20 !important;
+      }
+      .text-primary-emphasis {
+        color: ${primaryColor} !important;
+      }
+      #post-search-input, .input-group-text.bg-primary-subtle {
+        background-color: ${backgroundColor} !important;
+        border-color: ${primaryColor}40 !important;
+      }
+    `;
+
+    // Add social links if provided
+    if (settings.links) {
+      const navbarNav = document.querySelector('.navbar-nav');
+      if (navbarNav && !document.getElementById('social-links')) {
+        const socialLinksDiv = document.createElement('li');
+        socialLinksDiv.className = 'nav-item d-flex align-items-center gap-2 me-lg-3';
+        socialLinksDiv.id = 'social-links';
+
+        const links = [];
+        if (settings.links.twitter) {
+          links.push(`<a href="${escapeHtml(settings.links.twitter)}" target="_blank" rel="noopener noreferrer" class="nav-link p-1" title="Twitter"><i class="bi bi-twitter"></i></a>`);
+        }
+        if (settings.links.instagram) {
+          links.push(`<a href="${escapeHtml(settings.links.instagram)}" target="_blank" rel="noopener noreferrer" class="nav-link p-1" title="Instagram"><i class="bi bi-instagram"></i></a>`);
+        }
+        if (settings.links.tiktok) {
+          links.push(`<a href="${escapeHtml(settings.links.tiktok)}" target="_blank" rel="noopener noreferrer" class="nav-link p-1" title="TikTok"><i class="bi bi-tiktok"></i></a>`);
+        }
+        if (settings.links.custom?.url && settings.links.custom?.name) {
+          links.push(`<a href="${escapeHtml(settings.links.custom.url)}" target="_blank" rel="noopener noreferrer" class="nav-link p-1" title="${escapeHtml(settings.links.custom.name)}"><i class="bi bi-link-45deg"></i></a>`);
+        }
+
+        if (links.length > 0) {
+          socialLinksDiv.innerHTML = links.join('');
+          // Insert at the beginning of navbar-nav (before Latest, Trending, Topics, Author)
+          navbarNav.insertBefore(socialLinksDiv, navbarNav.firstElementChild);
+        }
+      }
+    }
+
+    // Add banner image if provided
+    if (settings.bannerImage) {
+      let bannerContainer = document.getElementById('blog-banner');
+      if (!bannerContainer) {
+        bannerContainer = document.createElement('div');
+        bannerContainer.id = 'blog-banner';
+        bannerContainer.className = 'blog-banner';
+        bannerContainer.style.cssText = 'width: 100vw; margin: 0; padding: 0; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;';
+        // Insert banner after nav, before main content (as sibling to #blog-app)
+        const mainContent = document.getElementById('blog-app');
+        if (mainContent && mainContent.parentNode) {
+          mainContent.parentNode.insertBefore(bannerContainer, mainContent);
+        }
+      }
+      bannerContainer.innerHTML = `<img src="${escapeHtml(settings.bannerImage)}" alt="Banner" class="d-block" style="width: 100%; max-height: 400px; object-fit: cover; display: block; margin: 0; padding: 0;">`;
+    } else {
+      // Remove banner if no image is set
+      const existingBanner = document.getElementById('blog-banner');
+      if (existingBanner) {
+        existingBanner.remove();
+      }
+    }
+  }
+
   function registerEvents() {
     elements.refreshFeedBtn?.addEventListener('click', () => loadFeed({ announce: true }));
     elements.searchForm?.addEventListener('submit', (event) => {
@@ -830,6 +963,7 @@
   }
 
   registerEvents();
+  loadAndApplySettings();
   bootstrapFromLocation();
   loadFeed();
 })();

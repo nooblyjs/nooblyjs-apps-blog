@@ -29,6 +29,22 @@ const elements = {
     cover: document.getElementById('post-cover'),
     content: document.getElementById('post-content'),
     scheduledFor: document.getElementById('post-scheduled')
+  },
+  settingsForm: document.getElementById('settings-form'),
+  settingsResetBtn: document.getElementById('reset-settings-btn'),
+  settingsPreviewBtn: document.getElementById('preview-settings-btn'),
+  settings: {
+    title: document.getElementById('site-title'),
+    primaryColor: document.getElementById('primary-color'),
+    primaryColorText: document.getElementById('primary-color-text'),
+    backgroundColor: document.getElementById('background-color'),
+    backgroundColorText: document.getElementById('background-color-text'),
+    bannerImage: document.getElementById('banner-image'),
+    twitter: document.getElementById('link-twitter'),
+    instagram: document.getElementById('link-instagram'),
+    tiktok: document.getElementById('link-tiktok'),
+    customName: document.getElementById('link-custom-name'),
+    customUrl: document.getElementById('link-custom-url')
   }
 };
 
@@ -377,6 +393,135 @@ function handleTableClick(event) {
   }
 }
 
+// Settings functionality
+let currentSettings = null;
+
+async function loadSettings() {
+  try {
+    const { data } = await apiRequest('/settings');
+    currentSettings = data;
+    populateSettingsForm(data);
+  } catch (error) {
+    setAlert(error.message || 'Unable to load settings.', 'danger');
+  }
+}
+
+function populateSettingsForm(settings) {
+  if (!settings) return;
+
+  elements.settings.title.value = settings.title || '';
+  elements.settings.primaryColor.value = settings.primaryColor || '#0d6efd';
+  elements.settings.primaryColorText.value = settings.primaryColor || '#0d6efd';
+  elements.settings.backgroundColor.value = settings.backgroundColor || '#ffffff';
+  elements.settings.backgroundColorText.value = settings.backgroundColor || '#ffffff';
+  elements.settings.bannerImage.value = settings.bannerImage || '';
+  elements.settings.twitter.value = settings.links?.twitter || '';
+  elements.settings.instagram.value = settings.links?.instagram || '';
+  elements.settings.tiktok.value = settings.links?.tiktok || '';
+  elements.settings.customName.value = settings.links?.custom?.name || '';
+  elements.settings.customUrl.value = settings.links?.custom?.url || '';
+}
+
+function syncColorPickerWithText(colorPicker, textInput) {
+  colorPicker.addEventListener('input', () => {
+    textInput.value = colorPicker.value;
+  });
+}
+
+function applySettingsPreview() {
+  const primaryColor = elements.settings.primaryColor.value;
+  const backgroundColor = elements.settings.backgroundColor.value;
+
+  // Apply to current page as preview
+  document.body.style.backgroundColor = backgroundColor;
+  document.querySelectorAll('.navbar, .btn-primary').forEach(el => {
+    el.style.backgroundColor = primaryColor;
+    el.style.borderColor = primaryColor;
+  });
+
+  setAlert('Preview applied! Changes are not saved yet.', 'info');
+}
+
+function resetSettingsForm() {
+  if (currentSettings) {
+    populateSettingsForm(currentSettings);
+    // Reset any preview styles
+    document.body.style.backgroundColor = '';
+    document.querySelectorAll('.navbar, .btn-primary').forEach(el => {
+      el.style.backgroundColor = '';
+      el.style.borderColor = '';
+    });
+    setAlert('Settings reset to saved values.', 'info');
+  }
+}
+
+async function handleSettingsSubmit(event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!elements.settingsForm.checkValidity()) {
+    elements.settingsForm.classList.add('was-validated');
+    return;
+  }
+
+  const payload = {
+    title: elements.settings.title.value.trim(),
+    primaryColor: elements.settings.primaryColor.value,
+    backgroundColor: elements.settings.backgroundColor.value,
+    bannerImage: elements.settings.bannerImage.value.trim() || '',
+    links: {
+      twitter: elements.settings.twitter.value.trim() || '',
+      instagram: elements.settings.instagram.value.trim() || '',
+      tiktok: elements.settings.tiktok.value.trim() || '',
+      custom: {
+        name: elements.settings.customName.value.trim() || '',
+        url: elements.settings.customUrl.value.trim() || ''
+      }
+    }
+  };
+
+  try {
+    setAlert('');
+    const { data } = await apiRequest('/settings', { method: 'PATCH', body: payload });
+    currentSettings = data;
+    setAlert('Settings saved successfully!', 'success');
+
+    // Update page title immediately
+    document.title = `${payload.title} · Author Hub`;
+
+    // Apply styles permanently
+    applySettingsToPage(data);
+  } catch (error) {
+    setAlert(error.message || 'Unable to save settings.', 'danger');
+  }
+}
+
+function applySettingsToPage(settings) {
+  if (!settings) return;
+
+  // Apply custom styles
+  let styleTag = document.getElementById('custom-blog-styles');
+  if (!styleTag) {
+    styleTag = document.createElement('style');
+    styleTag.id = 'custom-blog-styles';
+    document.head.appendChild(styleTag);
+  }
+
+  styleTag.textContent = `
+    body {
+      background-color: ${settings.backgroundColor || '#ffffff'} !important;
+    }
+    .navbar, .btn-primary, .badge.bg-primary {
+      background-color: ${settings.primaryColor || '#0d6efd'} !important;
+      border-color: ${settings.primaryColor || '#0d6efd'} !important;
+    }
+    .btn-primary:hover, .btn-primary:focus {
+      background-color: ${settings.primaryColor || '#0d6efd'}dd !important;
+      border-color: ${settings.primaryColor || '#0d6efd'}dd !important;
+    }
+  `;
+}
+
 function registerEvents() {
   elements.filterInput?.addEventListener('input', () => {
     applyFilter();
@@ -391,6 +536,24 @@ function registerEvents() {
   elements.newPostBtn?.addEventListener('click', () => {
     resetForm();
     elements.inputs.title.focus();
+  });
+
+  // Settings events
+  elements.settingsForm?.addEventListener('submit', handleSettingsSubmit);
+
+  elements.settingsResetBtn?.addEventListener('click', resetSettingsForm);
+
+  elements.settingsPreviewBtn?.addEventListener('click', applySettingsPreview);
+
+  // Color picker sync
+  syncColorPickerWithText(elements.settings.primaryColor, elements.settings.primaryColorText);
+  syncColorPickerWithText(elements.settings.backgroundColor, elements.settings.backgroundColorText);
+
+  // Load settings when Customise tab is clicked
+  document.getElementById('customise-tab')?.addEventListener('shown.bs.tab', () => {
+    if (!currentSettings) {
+      loadSettings();
+    }
   });
 }
 

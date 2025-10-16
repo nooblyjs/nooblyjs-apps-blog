@@ -36,111 +36,246 @@
 
   <main class="container-fluid py-4" id="author-app">
     <div id="author-alert" class="alert d-none" role="alert"></div>
-    <div class="row g-4">
-      <div class="col-12 col-xl-7">
-        <section class="card shadow-sm h-100">
-          <div class="card-header d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
-            <div>
-              <h1 class="h4 mb-1">Your stories</h1>
-              <p class="text-muted mb-0 small">Manage drafts and published posts from one place.</p>
-            </div>
-            <div class="input-group input-group-sm w-auto">
-              <span class="input-group-text bg-body-secondary border-0">
-                <i class="bi bi-search"></i>
-              </span>
-              <input type="search" class="form-control border-0 bg-body-secondary" id="post-filter-input" placeholder="Filter by title, tag, author…">
-            </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" id="authorTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="posts-tab" data-bs-toggle="tab" data-bs-target="#posts-tab-pane" type="button" role="tab" aria-controls="posts-tab-pane" aria-selected="true">
+          <i class="bi bi-file-text me-2"></i>Posts
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="customise-tab" data-bs-toggle="tab" data-bs-target="#customise-tab-pane" type="button" role="tab" aria-controls="customise-tab-pane" aria-selected="false">
+          <i class="bi bi-palette me-2"></i>Customise
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tabs Content -->
+    <div class="tab-content" id="authorTabsContent">
+      <!-- Posts Tab -->
+      <div class="tab-pane fade show active" id="posts-tab-pane" role="tabpanel" aria-labelledby="posts-tab">
+        <div class="row g-4">
+          <div class="col-12 col-xl-7">
+            <section class="card shadow-sm h-100">
+              <div class="card-header d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
+                <div>
+                  <h1 class="h4 mb-1">Your stories</h1>
+                  <p class="text-muted mb-0 small">Manage drafts and published posts from one place.</p>
+                </div>
+                <div class="input-group input-group-sm w-auto">
+                  <span class="input-group-text bg-body-secondary border-0">
+                    <i class="bi bi-search"></i>
+                  </span>
+                  <input type="search" class="form-control border-0 bg-body-secondary" id="post-filter-input" placeholder="Filter by title, tag, author…">
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="author-post-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th scope="col">Title</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" class="text-nowrap">Updated</th>
+                      <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colspan="4" class="text-center py-5 text-muted">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <div>Loading posts…</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="author-post-table">
-              <thead class="table-light">
-                <tr>
-                  <th scope="col">Title</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" class="text-nowrap">Updated</th>
-                  <th scope="col" class="text-end">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colspan="4" class="text-center py-5 text-muted">
-                    <div class="spinner-border text-primary mb-3" role="status"></div>
-                    <div>Loading posts…</div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="col-12 col-xl-5">
+            <section class="card shadow-sm">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                  <h2 class="h5 mb-0" id="editor-heading">Create a new story</h2>
+                  <p class="text-muted mb-0 small">Draft, edit, and publish without leaving the page.</p>
+                </div>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis" id="editor-status-badge">Draft</span>
+              </div>
+              <div class="card-body">
+                <form id="post-editor-form" novalidate class="needs-validation">
+                  <input type="hidden" id="post-id">
+                  <div class="mb-3">
+                    <label for="post-title" class="form-label">Title</label>
+                    <input type="text" class="form-control" id="post-title" required>
+                    <div class="invalid-feedback">Please provide a title.</div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="post-subtitle" class="form-label">Subtitle</label>
+                    <input type="text" class="form-control" id="post-subtitle" placeholder="Optional hook for your story">
+                  </div>
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label for="post-author" class="form-label">Author</label>
+                      <input type="text" class="form-control" id="post-author" placeholder="Jane Doe" required>
+                      <div class="invalid-feedback">Please provide an author name.</div>
+                    </div>
+                    <div class="col-md-6">
+                      <label for="post-tags" class="form-label">Tags</label>
+                      <input type="text" class="form-control" id="post-tags" placeholder="Comma separated e.g. Product, API" >
+                    </div>
+                  </div>
+                  <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                      <label for="post-status" class="form-label">Status</label>
+                      <select class="form-select" id="post-status">
+                        <option value="draft" selected>Draft</option>
+                        <option value="published">Published</option>
+                        <option value="scheduled">Scheduled</option>
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label for="post-cover" class="form-label">Cover image URL</label>
+                      <input type="url" class="form-control" id="post-cover" placeholder="https://">
+                    </div>
+                  </div>
+                  <div class="mt-3">
+                    <label for="post-content" class="form-label">Story</label>
+                    <textarea class="form-control" id="post-content" rows="6" required placeholder="Share your story…"></textarea>
+                    <div class="invalid-feedback">Your story needs some content.</div>
+                  </div>
+                  <div class="mt-3">
+                    <label for="post-scheduled" class="form-label">Schedule (optional)</label>
+                    <input type="datetime-local" class="form-control" id="post-scheduled">
+                  </div>
+                  <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-editor-btn">
+                      <i class="bi bi-arrow-clockwise me-1"></i>
+                      Reset
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-save me-1"></i>
+                      Save changes
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
           </div>
-        </section>
+        </div>
       </div>
-      <div class="col-12 col-xl-5">
-        <section class="card shadow-sm">
-          <div class="card-header d-flex justify-content-between align-items-center">
-            <div>
-              <h2 class="h5 mb-0" id="editor-heading">Create a new story</h2>
-              <p class="text-muted mb-0 small">Draft, edit, and publish without leaving the page.</p>
-            </div>
-            <span class="badge bg-secondary-subtle text-secondary-emphasis" id="editor-status-badge">Draft</span>
+
+      <!-- Customise Tab -->
+      <div class="tab-pane fade" id="customise-tab-pane" role="tabpanel" aria-labelledby="customise-tab">
+        <div class="row g-4">
+          <div class="col-12">
+            <section class="card shadow-sm">
+              <div class="card-header">
+                <h2 class="h5 mb-1">Blog Customisation</h2>
+                <p class="text-muted mb-0 small">Personalise the look and feel of your blog.</p>
+              </div>
+              <div class="card-body">
+                <form id="settings-form" novalidate class="needs-validation">
+
+                  <!-- Site Title -->
+                  <div class="mb-4">
+                    <label for="site-title" class="form-label fw-semibold">
+                      <i class="bi bi-type me-2"></i>Site Title
+                    </label>
+                    <input type="text" class="form-control" id="site-title" placeholder="NooblyJS Blog" required>
+                    <div class="form-text">This appears in the header and browser tab.</div>
+                    <div class="invalid-feedback">Please provide a site title.</div>
+                  </div>
+
+                  <!-- Color Customisation -->
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold">
+                      <i class="bi bi-palette-fill me-2"></i>Colors
+                    </label>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label for="primary-color" class="form-label">Primary Color</label>
+                        <div class="input-group">
+                          <input type="color" class="form-control form-control-color" id="primary-color" value="#0d6efd" title="Choose primary color">
+                          <input type="text" class="form-control" id="primary-color-text" value="#0d6efd" readonly>
+                        </div>
+                        <div class="form-text">Header and button colors.</div>
+                      </div>
+                      <div class="col-md-6">
+                        <label for="background-color" class="form-label">Background Color</label>
+                        <div class="input-group">
+                          <input type="color" class="form-control form-control-color" id="background-color" value="#ffffff" title="Choose background color">
+                          <input type="text" class="form-control" id="background-color-text" value="#ffffff" readonly>
+                        </div>
+                        <div class="form-text">Main background color.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Social Links -->
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold">
+                      <i class="bi bi-share me-2"></i>Social Links
+                    </label>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label for="link-twitter" class="form-label">
+                          <i class="bi bi-twitter text-primary me-1"></i>Twitter
+                        </label>
+                        <input type="url" class="form-control" id="link-twitter" placeholder="https://twitter.com/yourhandle">
+                      </div>
+                      <div class="col-md-6">
+                        <label for="link-instagram" class="form-label">
+                          <i class="bi bi-instagram text-danger me-1"></i>Instagram
+                        </label>
+                        <input type="url" class="form-control" id="link-instagram" placeholder="https://instagram.com/yourhandle">
+                      </div>
+                      <div class="col-md-6">
+                        <label for="link-tiktok" class="form-label">
+                          <i class="bi bi-tiktok me-1"></i>TikTok
+                        </label>
+                        <input type="url" class="form-control" id="link-tiktok" placeholder="https://tiktok.com/@yourhandle">
+                      </div>
+                      <div class="col-md-6">
+                        <label for="link-custom-name" class="form-label">
+                          <i class="bi bi-link-45deg text-secondary me-1"></i>Custom Link Name
+                        </label>
+                        <input type="text" class="form-control" id="link-custom-name" placeholder="Website, LinkedIn, etc.">
+                      </div>
+                      <div class="col-12">
+                        <label for="link-custom-url" class="form-label">Custom Link URL</label>
+                        <input type="url" class="form-control" id="link-custom-url" placeholder="https://yourwebsite.com">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Banner Image -->
+                  <div class="mb-4">
+                    <label for="banner-image" class="form-label fw-semibold">
+                      <i class="bi bi-image me-2"></i>Banner Image (Optional)
+                    </label>
+                    <input type="url" class="form-control" id="banner-image" placeholder="https://example.com/banner.jpg">
+                    <div class="form-text">Header banner image URL.</div>
+                  </div>
+
+                  <!-- Preview and Actions -->
+                  <div class="d-flex gap-2 justify-content-between align-items-center pt-3 border-top">
+                    <button type="button" class="btn btn-outline-secondary" id="preview-settings-btn">
+                      <i class="bi bi-eye me-1"></i>Preview
+                    </button>
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-outline-secondary" id="reset-settings-btn">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                      </button>
+                      <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle me-1"></i>Save Settings
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </section>
           </div>
-          <div class="card-body">
-            <form id="post-editor-form" novalidate class="needs-validation">
-              <input type="hidden" id="post-id">
-              <div class="mb-3">
-                <label for="post-title" class="form-label">Title</label>
-                <input type="text" class="form-control" id="post-title" required>
-                <div class="invalid-feedback">Please provide a title.</div>
-              </div>
-              <div class="mb-3">
-                <label for="post-subtitle" class="form-label">Subtitle</label>
-                <input type="text" class="form-control" id="post-subtitle" placeholder="Optional hook for your story">
-              </div>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <label for="post-author" class="form-label">Author</label>
-                  <input type="text" class="form-control" id="post-author" placeholder="Jane Doe" required>
-                  <div class="invalid-feedback">Please provide an author name.</div>
-                </div>
-                <div class="col-md-6">
-                  <label for="post-tags" class="form-label">Tags</label>
-                  <input type="text" class="form-control" id="post-tags" placeholder="Comma separated e.g. Product, API" >
-                </div>
-              </div>
-              <div class="row g-3 mt-1">
-                <div class="col-md-6">
-                  <label for="post-status" class="form-label">Status</label>
-                  <select class="form-select" id="post-status">
-                    <option value="draft" selected>Draft</option>
-                    <option value="published">Published</option>
-                    <option value="scheduled">Scheduled</option>
-                  </select>
-                </div>
-                <div class="col-md-6">
-                  <label for="post-cover" class="form-label">Cover image URL</label>
-                  <input type="url" class="form-control" id="post-cover" placeholder="https://">
-                </div>
-              </div>
-              <div class="mt-3">
-                <label for="post-content" class="form-label">Story</label>
-                <textarea class="form-control" id="post-content" rows="6" required placeholder="Share your story…"></textarea>
-                <div class="invalid-feedback">Your story needs some content.</div>
-              </div>
-              <div class="mt-3">
-                <label for="post-scheduled" class="form-label">Schedule (optional)</label>
-                <input type="datetime-local" class="form-control" id="post-scheduled">
-              </div>
-              <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-editor-btn">
-                  <i class="bi bi-arrow-clockwise me-1"></i>
-                  Reset
-                </button>
-                <button type="submit" class="btn btn-primary">
-                  <i class="bi bi-save me-1"></i>
-                  Save changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </section>
+        </div>
       </div>
     </div>
   </main>

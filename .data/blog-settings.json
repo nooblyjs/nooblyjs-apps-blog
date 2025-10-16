@@ -1,0 +1,15 @@
+{
+  "title": "Stephens Blog",
+  "primaryColor": "#9b5bfb",
+  "backgroundColor": "#ecddfd",
+  "bannerImage": "",
+  "links": {
+    "twitter": "",
+    "instagram": "",
+    "tiktok": "",
+    "custom": {
+      "name": "NooblyJS",
+      "url": "https://www.linkedin.com/in/nooblyjs-framework/"
+    }
+  }
+}

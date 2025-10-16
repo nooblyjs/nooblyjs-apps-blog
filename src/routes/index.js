@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const createFilePostStore = require('../services/filePostStore');
 
 const API_BASE_PATH = '/applications/blog/api';
@@ -20,7 +21,17 @@ const ONE_MINUTE = 60 * 1000;
 const DEFAULT_SITE_SETTINGS = {
   title: 'NooblyJS Blog',
   primaryColor: '#0d6efd',
+  backgroundColor: '#ffffff',
   bannerImage: '',
+  links: {
+    twitter: '',
+    instagram: '',
+    tiktok: '',
+    custom: {
+      name: '',
+      url: ''
+    }
+  },
   key: 'default'
 };
 
@@ -323,7 +334,15 @@ module.exports = (options, eventEmitter, services) => {
       return postStore.listAll();
     }
     await containersReady;
-    return Array.from(getContainerMap(container).values());
+
+    // Use the dataService API directly for compatibility with all providers
+    try {
+      const records = await dataService.getAll(container);
+      return Array.isArray(records) ? records : [];
+    } catch (error) {
+      log.warn('Failed to list records, falling back to empty array', { container, error: error.message });
+      return [];
+    }
   };
 
   /**
@@ -338,8 +357,12 @@ module.exports = (options, eventEmitter, services) => {
       return postStore.get(id);
     }
     await containersReady;
-    const record = getContainerMap(container).get(id);
-    return record || null;
+    try {
+      const record = await dataService.getByUuid(container, id);
+      return record || null;
+    } catch (error) {
+      return null;
+    }
   };
 
   /**
@@ -357,10 +380,9 @@ module.exports = (options, eventEmitter, services) => {
     const now = new Date().toISOString();
     const record = { ...payload, createdAt: payload.createdAt || now, updatedAt: payload.updatedAt || now };
     const id = await dataService.add(container, record);
-    const containerMap = getContainerMap(container);
-    const saved = { ...(containerMap.get(id) || record), id };
-    containerMap.set(id, saved);
-    return saved;
+    // Retrieve the saved record to ensure we have the complete object
+    const saved = await dataService.getByUuid(container, id);
+    return saved || { ...record, id };
   };
 
   /**
@@ -376,15 +398,22 @@ module.exports = (options, eventEmitter, services) => {
       return postStore.update(id, updater);
     }
     await containersReady;
-    const containerMap = getContainerMap(container);
-    const existing = containerMap.get(id);
-    if (!existing) return null;
-    const now = new Date().toISOString();
-    const next = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
-    next.id = id;
-    next.updatedAt = now;
-    containerMap.set(id, next);
-    return next;
+    try {
+      const existing = await dataService.getByUuid(container, id);
+      if (!existing) return null;
+
+      const now = new Date().toISOString();
+      const next = typeof updater === 'function' ? updater(existing) : { ...existing, ...updater };
+      next.id = id;
+      next.updatedAt = now;
+
+      // Update via dataService
+      await dataService.update(container, id, next);
+      return next;
+    } catch (error) {
+      log.error('Failed to update record', { container, id, error: error.message });
+      return null;
+    }
   };
 
   /**
@@ -399,12 +428,13 @@ module.exports = (options, eventEmitter, services) => {
       return postStore.remove(id);
     }
     await containersReady;
-    const success = await dataService.remove(container, id);
-    if (success) {
-      const containerMap = getContainerMap(container);
-      containerMap.delete(id);
+    try {
+      const success = await dataService.remove(container, id);
+      return success;
+    } catch (error) {
+      log.error('Failed to delete record', { container, id, error: error.message });
+      return false;
     }
-    return success;
   };
 
   /**
@@ -433,7 +463,15 @@ module.exports = (options, eventEmitter, services) => {
     const document = buildSearchDocument(post);
     if (!document) return;
     try {
+      log.debug('Indexing post for search', {
+        postId: post.id,
+        title: post.title,
+        hasSearchText: !!document.searchText,
+        searchTextLength: document.searchText?.length || 0,
+        searchTextSample: document.searchText?.substring(0, 100)
+      });
       await search.add(post.id, document, 'blog-posts');
+      log.debug('Successfully indexed post', { postId: post.id });
     } catch (error) {
       log.warn('Failed to index post for search', { postId: post.id, error: error.message });
     }
@@ -1074,43 +1112,22 @@ module.exports = (options, eventEmitter, services) => {
         return sendJson(res, 200, []);
       }
 
-      if (search && typeof search.search === 'function') {
-        const results = await search.search(q.trim(), 'blog-posts');
-        const seen = new Set();
-        const matches = [];
-        for (const entry of results) {
-          const raw = entry?.obj || entry?.object || entry;
-          const candidate = stripSearchMetadata(raw);
-          const candidateId = candidate?.id || entry?.key;
-          if (candidate && candidateId && !seen.has(candidateId) && candidate.status === 'published') {
-            seen.add(candidateId);
-            matches.push(candidate);
-            continue;
-          }
-          const fallbackId = candidateId || entry?.key;
-          if (!fallbackId || seen.has(fallbackId)) {
-            continue;
-          }
-          const fallback = await getRecord(CONTAINERS.POSTS, fallbackId);
-          if (fallback && fallback.status === 'published') {
-            seen.add(fallback.id);
-            matches.push(fallback);
-          }
-        }
-        sendJson(res, 200, matches);
-        return;
-      }
-
+      // NOTE: Using fallback search due to NooblyJS search service limitations
+      // The memory search provider doesn't return results correctly
       const posts = await listRecords(CONTAINERS.POSTS);
       const term = q.trim().toLowerCase();
       const matches = posts.filter((post) => {
+        if (post.status !== 'published') return false;
         return (
           post.title?.toLowerCase().includes(term) ||
           post.subtitle?.toLowerCase().includes(term) ||
           post.excerpt?.toLowerCase().includes(term) ||
+          post.content?.toLowerCase().includes(term) ||
+          post.author?.name?.toLowerCase().includes(term) ||
           (post.tags || []).some((tag) => tag.toLowerCase().includes(term))
         );
       });
+      log.info('Search completed', { query: q, matchCount: matches.length });
       sendJson(res, 200, matches);
     } catch (error) {
       log.error('Failed to search posts', { error: error.message });
@@ -1161,6 +1178,93 @@ module.exports = (options, eventEmitter, services) => {
         .status(500)
         .type('application/xml')
         .send('<?xml version="1.0" encoding="UTF-8"?><error>Unable to generate sitemap</error>');
+    }
+  });
+
+  /**
+   * Settings file management
+   */
+  const fs = require('fs').promises;
+  const settingsFilePath = path.join(process.cwd(), '.data', 'blog-settings.json');
+
+  async function loadSettings() {
+    try {
+      const data = await fs.readFile(settingsFilePath, 'utf8');
+      const settings = JSON.parse(data);
+      // Remove key field if present - not needed for JSON storage
+      const { key, ...cleanSettings } = settings;
+      return cleanSettings;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // File doesn't exist, return defaults without 'key'
+        const { key, ...defaults } = DEFAULT_SITE_SETTINGS;
+        return defaults;
+      }
+      throw error;
+    }
+  }
+
+  async function saveSettings(settings) {
+    try {
+      // Ensure .data directory exists
+      const dataDir = path.dirname(settingsFilePath);
+      await fs.mkdir(dataDir, { recursive: true });
+
+      // Remove dataService-specific fields before saving
+      const { id, key, createdAt, updatedAt, ...cleanSettings } = settings;
+
+      // Write settings to file
+      await fs.writeFile(settingsFilePath, JSON.stringify(cleanSettings, null, 2), 'utf8');
+      return cleanSettings;
+    } catch (error) {
+      log.error('Failed to save settings file', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * GET SITE SETTINGS
+   */
+  app.get(`${API_BASE_PATH}/settings`, async (_req, res) => {
+    try {
+      const settings = await loadSettings();
+      sendJson(res, 200, settings);
+    } catch (error) {
+      log.error('Failed to load settings', { error: error.message });
+      sendError(res, 500, 'SETTINGS_FETCH_FAILED', 'Unable to load site settings.');
+    }
+  });
+
+  /**
+   * UPDATE SITE SETTINGS
+   */
+  app.patch(`${API_BASE_PATH}/settings`, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const currentSettings = await loadSettings();
+
+      const updatedSettings = {
+        ...currentSettings,
+        title: payload.title !== undefined ? payload.title : currentSettings.title,
+        primaryColor: payload.primaryColor !== undefined ? payload.primaryColor : currentSettings.primaryColor,
+        backgroundColor: payload.backgroundColor !== undefined ? payload.backgroundColor : currentSettings.backgroundColor,
+        bannerImage: payload.bannerImage !== undefined ? payload.bannerImage : currentSettings.bannerImage,
+        links: {
+          twitter: payload.links?.twitter !== undefined ? payload.links.twitter : currentSettings.links?.twitter || '',
+          instagram: payload.links?.instagram !== undefined ? payload.links.instagram : currentSettings.links?.instagram || '',
+          tiktok: payload.links?.tiktok !== undefined ? payload.links.tiktok : currentSettings.links?.tiktok || '',
+          custom: {
+            name: payload.links?.custom?.name !== undefined ? payload.links.custom.name : currentSettings.links?.custom?.name || '',
+            url: payload.links?.custom?.url !== undefined ? payload.links.custom.url : currentSettings.links?.custom?.url || ''
+          }
+        }
+      };
+
+      await saveSettings(updatedSettings);
+      sendJson(res, 200, updatedSettings);
+    } catch (error) {
+      log.error('Failed to update settings', { error: error.message });
+      sendError(res, 500, 'SETTINGS_UPDATE_FAILED', 'Unable to update site settings.');
     }
   });
 };
