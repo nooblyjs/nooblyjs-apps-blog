@@ -1,8 +1,8 @@
 {
   "title": "Stephens Blog",
-  "primaryColor": "#9b5bfb",
-  "backgroundColor": "#ecddfd",
-  "bannerImage": "",
+  "primaryColor": "#0d0d0d",
+  "backgroundColor": "#d6d6d6",
+  "bannerImage": "https://silver-spork-r9rp5954xpvfv79-3003.app.github.dev/banners/gray-testing.jpg",
   "links": {
     "twitter": "",
     "instagram": "",
