@@ -41,6 +41,8 @@ module.exports = (options, eventEmitter, services) => {
 
   app.get(VIEW_BASE_PATH, sendIndex);
   app.get(`${VIEW_BASE_PATH}/`, sendIndex);
+  app.get(`${VIEW_BASE_PATH}/posts/:slug`, sendIndex);
+  app.get(`${VIEW_BASE_PATH}/posts/:slug/`, sendIndex);
   app.get(`${VIEW_BASE_PATH}/author`, protect, sendAuthor);
   app.get(`${VIEW_BASE_PATH}/author/`, protect, sendAuthor);
   app.get('/appplications/blog/author', (_req, res) => res.redirect(`${VIEW_BASE_PATH}/author`));

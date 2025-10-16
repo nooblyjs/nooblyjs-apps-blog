@@ -5,6 +5,8 @@
   if (!appRoot) return;
 
   const API_BASE = '/applications/blog/api';
+  const BLOG_BASE_PATH = '/applications/blog';
+  const POST_PATH_PREFIX = `${BLOG_BASE_PATH}/posts/`;
 
   const DEFAULT_LATEST_HEADING = 'Latest posts';
 
@@ -106,6 +108,19 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function buildPostUrl(post) {
+    const slug = encodeURIComponent((post && (post.slug || post.id)) || '');
+    return `${POST_PATH_PREFIX}${slug}`;
+  }
+
+  function getPostIdFromPath(pathname = window.location.pathname) {
+    if (!pathname.startsWith(POST_PATH_PREFIX)) {
+      return null;
+    }
+    const remainder = pathname.slice(POST_PATH_PREFIX.length).replace(/\/+$/, '');
+    return remainder ? decodeURIComponent(remainder) : null;
   }
 
   function formatDate(value) {
@@ -236,6 +251,7 @@
     }
 
     const primaryTag = post.tags?.[0] ? escapeHtml(post.tags[0]) : 'Featured';
+    const postUrl = escapeHtml(buildPostUrl(post));
 
     elements.featured.innerHTML = `
       <article class="card card-featured shadow h-100 overflow-hidden">
@@ -248,9 +264,9 @@
           <h2 class="card-title h3 mb-1">${escapeHtml(post.title)}</h2>
           ${post.subtitle ? `<p class="text-muted mb-2">${escapeHtml(post.subtitle)}</p>` : ''}
           <p class="mb-3">${escapeHtml(post.excerpt || '')}</p>
-          <button class="btn btn-primary align-self-start" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
+          <a href="${postUrl}" class="btn btn-primary align-self-start" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
             <i class="bi bi-journal-text me-2"></i>Read story
-          </button>
+          </a>
         </div>
       </article>
     `;
@@ -271,6 +287,7 @@
       .map((post) => {
         const tags = (post.tags || []).slice(0, 3);
         const stats = post.stats || {};
+        const postUrl = escapeHtml(buildPostUrl(post));
         return `
           <article class="card shadow-sm" data-post-id="${escapeHtml(post.id)}">
             <div class="card-body d-flex flex-column gap-3">
@@ -284,16 +301,16 @@
               </div>
               <div>
                 <h3 class="h4 mb-2">
-                  <a href="#" class="text-decoration-none" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
+                  <a href="${postUrl}" class="text-decoration-none" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
                     ${escapeHtml(post.title)}
                   </a>
                 </h3>
                 ${post.subtitle ? `<p class="text-muted mb-2">${escapeHtml(post.subtitle)}</p>` : ''}
                 <p class="mb-3">${escapeHtml(post.excerpt || '')}</p>
               </div>
-              <button class="btn btn-primary align-self-start" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
+              <a href="${postUrl}" class="btn btn-primary align-self-start" data-post-id="${escapeHtml(post.id)}" data-action="open-post">
                 <i class="bi bi-journal-text me-2"></i>Read story
-              </button>
+              </a>
               <div class="d-flex gap-2 flex-wrap">
                 ${tags
                   .map((tag) => `<span class="badge bg-primary-subtle text-primary-emphasis">${escapeHtml(tag)}</span>`)
@@ -322,8 +339,9 @@
 
     elements.trendingList.innerHTML = posts
       .map((post, index) => {
+        const postUrl = escapeHtml(buildPostUrl(post));
         return `
-          <a href="#" class="list-group-item list-group-item-action d-flex gap-3 align-items-start" data-post-id="${escapeHtml(
+          <a href="${postUrl}" class="list-group-item list-group-item-action d-flex gap-3 align-items-start" data-post-id="${escapeHtml(
             post.id
           )}" data-action="open-post">
             <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">${index + 1}</span>
@@ -428,7 +446,29 @@
     }
   }
 
-  async function openPost(postId) {
+  function updateHistoryForPost(post, mode = 'push') {
+    if (!window.history || !post) return;
+    const slugUrl = buildPostUrl(post);
+    const statePayload = { postId: post.id };
+    if (mode === 'replace') {
+      window.history.replaceState(statePayload, '', slugUrl);
+    } else if (mode === 'push') {
+      window.history.pushState(statePayload, '', slugUrl);
+    }
+  }
+
+  function resetHistoryToBase(mode = 'replace') {
+    if (!window.history) return;
+    const url = BLOG_BASE_PATH;
+    const statePayload = { postId: null };
+    if (mode === 'push') {
+      window.history.pushState(statePayload, '', url);
+    } else {
+      window.history.replaceState(statePayload, '', url);
+    }
+  }
+
+  async function openPost(postId, { historyMode = 'push' } = {}) {
     if (!postId) return;
     try {
       const { data: post } = await request(`/posts/${encodeURIComponent(postId)}`);
@@ -441,7 +481,14 @@
       renderExpandedPost(post);
       focusExpandedPost();
       await loadComments(post.id);
+      if (historyMode !== 'none') {
+        const mode = historyMode === 'replace' ? 'replace' : 'push';
+        updateHistoryForPost(post, mode);
+      }
     } catch (error) {
+      if (historyMode === 'replace') {
+        resetHistoryToBase('replace');
+      }
       showToast(error.message, 'danger', 'Unable to load story');
     }
   }
@@ -491,7 +538,7 @@
     }
   }
 
-  function hideExpandedPost() {
+  function hideExpandedPost(options = {}) {
     if (!elements.readPostPanel) return;
     elements.readPostPanel.classList.add('d-none');
     elements.readPostPanel.removeAttribute('data-post-id');
@@ -515,6 +562,9 @@
     setLatestHeading(restoredHeading, { remember: false });
     state.latestHeadingHtmlBeforeReading = null;
     state.currentPostId = null;
+    if (options.updateHistory) {
+      resetHistoryToBase('replace');
+    }
   }
 
   function renderActionButtons(post) {
@@ -716,6 +766,12 @@
     const tag = target.getAttribute('data-tag');
 
     if (action === 'open-post') {
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
       event.preventDefault();
       openPost(postId);
     } else if (action === 'clap' || action === 'bookmark') {
@@ -727,7 +783,27 @@
       runSearch(tag);
     } else if (action === 'close-expanded') {
       event.preventDefault();
-      hideExpandedPost();
+      hideExpandedPost({ updateHistory: true });
+    }
+  }
+
+  function handlePopState() {
+    const postId = getPostIdFromPath();
+    if (postId) {
+      openPost(postId, { historyMode: 'none' });
+    } else {
+      if (state.currentPostId) {
+        hideExpandedPost();
+      }
+    }
+  }
+
+  function bootstrapFromLocation() {
+    const initialPostId = getPostIdFromPath();
+    if (initialPostId) {
+      openPost(initialPostId, { historyMode: 'replace' });
+    } else if (window.history) {
+      window.history.replaceState({ postId: null }, '', window.location.pathname + window.location.search);
     }
   }
 
@@ -750,8 +826,10 @@
     elements.createPostForm?.addEventListener('submit', handleCreatePost);
     elements.commentForm?.addEventListener('submit', handleCommentSubmit);
     document.addEventListener('click', handleGlobalClick);
+    window.addEventListener('popstate', handlePopState);
   }
 
   registerEvents();
+  bootstrapFromLocation();
   loadFeed();
 })();

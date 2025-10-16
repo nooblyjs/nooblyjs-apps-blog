@@ -3,6 +3,7 @@
 const createFilePostStore = require('../services/filePostStore');
 
 const API_BASE_PATH = '/applications/blog/api';
+const VIEW_BASE_PATH = '/applications/blog';
 const CONTAINERS = {
   POSTS: 'blog_posts',
   COMMENTS: 'blog_comments',
@@ -143,6 +144,21 @@ function stripSearchMetadata(doc) {
   if (!doc || typeof doc !== 'object') return null;
   const { searchText, ...rest } = doc;
   return rest;
+}
+
+/**
+ * Escapes arbitrary text for XML contexts.
+ * @param {string} value
+ * @return {string}
+ */
+function escapeXml(value = '') {
+  return value
+    .toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 /**
@@ -1091,6 +1107,52 @@ module.exports = (options, eventEmitter, services) => {
     } catch (error) {
       log.error('Failed to search posts', { error: error.message });
       sendError(res, 500, 'SEARCH_FAILED', 'Unable to search posts.');
+    }
+  });
+
+  app.get('/sitemaps', async (req, res) => {
+    try {
+      const posts = await listRecords(CONTAINERS.POSTS);
+      const published = posts
+        .filter((post) => post.status === 'published')
+        .sort((a, b) => {
+          const dateB = new Date(b.updatedAt || b.publishedAt || b.createdAt || 0).getTime();
+          const dateA = new Date(a.updatedAt || a.publishedAt || a.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
+
+      const forwardedProto = req.get('x-forwarded-proto');
+      const forwardedHost = req.get('x-forwarded-host');
+      const protocol = (forwardedProto ? forwardedProto.split(',')[0] : req.protocol || 'http') || 'http';
+      const host = (forwardedHost ? forwardedHost.split(',')[0] : req.get('host')) || '';
+      const baseUrl = host ? `${protocol}://${host}` : '';
+      const postPrefix = `${baseUrl}${VIEW_BASE_PATH}/posts`;
+
+      const urlEntries = published
+        .map((post) => {
+          const slug = encodeURIComponent(post.slug || post.id);
+          const loc = `${postPrefix}/${slug}`;
+          const lastMod = new Date(post.updatedAt || post.publishedAt || post.createdAt || Date.now()).toISOString();
+          return `  <url>\n    <loc>${escapeXml(loc)}</loc>\n    <lastmod>${escapeXml(lastMod)}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>`;
+        })
+        .join('\n');
+
+      const xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        urlEntries,
+        '</urlset>'
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      res.type('application/xml').send(xml);
+    } catch (error) {
+      log.error('Failed to build sitemap', { error: error.message });
+      res
+        .status(500)
+        .type('application/xml')
+        .send('<?xml version="1.0" encoding="UTF-8"?><error>Unable to generate sitemap</error>');
     }
   });
 };
