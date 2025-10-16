@@ -25,12 +25,17 @@ const PORT = process.env.PORT || 3003;
 app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
 app.use(bodyParser.json({ limit: '100mb' }));
 
+// Initialise our options
+var options = {};
+options.dataDir ="./.data"
+options.logDir ="./.data"
+
 // Initialise event system
 const eventEmitter = new EventEmitter()  
 
 // Initiate the service Registry
 const serviceRegistry = require('nooblyjs-core');
-serviceRegistry.initialize(app,eventEmitter);
+serviceRegistry.initialize(app,eventEmitter,options);
 
 const log = serviceRegistry.logger('console');
 const cache = serviceRegistry.cache('memory');

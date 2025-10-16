@@ -32,10 +32,10 @@ module.exports = (app, server, eventEmitter, serviceRegistry, options) => {
   const cache = serviceRegistry.cache('memory');
   const queue = serviceRegistry.queue('memory');
   const filing = serviceRegistry.filing('local');
-  const dataService = serviceRegistry.dataService('memory');
-  const search = serviceRegistry.searching('memory');
+  const dataService = serviceRegistry.dataService('file');
+  const search = serviceRegistry.searching('file');
   const measuring = serviceRegistry.measuring('memory');
-  const authService = serviceRegistry.authservice('memory');
+  const authService = serviceRegistry.authservice('file');
   const servicesAuthMiddleware = serviceRegistry.servicesAuthMiddleware || ((req, res, next) => next());
 
   // Register routes and views
