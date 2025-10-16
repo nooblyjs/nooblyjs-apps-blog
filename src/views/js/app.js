@@ -842,8 +842,11 @@
     const backgroundColor = settings.backgroundColor || '#ffffff';
 
     styleTag.textContent = `
-      body, #blog-app, main {
+      body {
         background-color: ${backgroundColor} !important;
+      }
+      main {
+        background: transparent !important;
       }
       .navbar.bg-primary, .btn-primary, .badge.bg-primary {
         background-color: ${primaryColor} !important;
@@ -923,14 +926,11 @@
         bannerContainer = document.createElement('div');
         bannerContainer.id = 'blog-banner';
         bannerContainer.className = 'blog-banner';
-        bannerContainer.style.cssText = 'width: 100vw; margin: 0; padding: 0; position: relative; left: 50%; right: 50%; margin-left: -50vw; margin-right: -50vw;';
-        // Insert banner after nav, before main content (as sibling to #blog-app)
-        const mainContent = document.getElementById('blog-app');
-        if (mainContent && mainContent.parentNode) {
-          mainContent.parentNode.insertBefore(bannerContainer, mainContent);
-        }
+        bannerContainer.style.cssText = 'position: fixed; top: 56px; left: 0; right: 0; width: 100%; height: 500px; z-index: 0; overflow: hidden;';
+        // Insert banner into body (at top level)
+        document.body.insertBefore(bannerContainer, document.body.firstChild);
       }
-      bannerContainer.innerHTML = `<img src="${escapeHtml(settings.bannerImage)}" alt="Banner" class="d-block" style="width: 100%; max-height: 150px; object-fit: cover; display: block; margin: 0; padding: 0;">`;
+      bannerContainer.innerHTML = `<img src="${escapeHtml(settings.bannerImage)}" alt="Banner" class="d-block" style="width: 100%; height: 100%; object-fit: cover; display: block; margin: 0; padding: 0;">`;
     } else {
       // Remove banner if no image is set
       const existingBanner = document.getElementById('blog-banner');
