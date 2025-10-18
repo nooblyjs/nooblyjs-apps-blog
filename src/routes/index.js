@@ -463,7 +463,7 @@ module.exports = (options, eventEmitter, services) => {
     const document = buildSearchDocument(post);
     if (!document) return;
     try {
-      log.debug('Indexing post for search', {
+      log.info('Indexing post for search', {
         postId: post.id,
         title: post.title,
         hasSearchText: !!document.searchText,
@@ -471,7 +471,7 @@ module.exports = (options, eventEmitter, services) => {
         searchTextSample: document.searchText?.substring(0, 100)
       });
       await search.add(post.id, document, 'blog-posts');
-      log.debug('Successfully indexed post', { postId: post.id });
+      log.info('Successfully indexed post', { postId: post.id });
     } catch (error) {
       log.warn('Failed to index post for search', { postId: post.id, error: error.message });
     }
