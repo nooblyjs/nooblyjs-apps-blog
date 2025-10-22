@@ -17,7 +17,13 @@
   "directories": {
     "doc": "docs",
     "test": "tests"
-  },
+  },  
+  "files": [
+    "src",
+    "README.md",
+    "package.json",
+    "index.js"
+  ],
   "scripts": {
     "dev:web": "node ./app.js",
     "kill": "  kill -9 $(lsof -t -i:3003)"
