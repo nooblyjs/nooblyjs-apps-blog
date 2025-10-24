@@ -26,9 +26,15 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
 app.use(bodyParser.json({ limit: '100mb' }));
 
 // Initialise our options
-var options = {};
-options.dataDir ="./.data"
-options.logDir ="./.data"
+var options = { 
+  logDir:  path.join(__dirname, './.app-blog/', 'logs'),
+  dataDir : path.join(__dirname, './.app-blog/', 'data'),
+  'express-app': app,
+    brandingConfig: {
+      appName: 'App Lite',
+      primaryColor: '#000'
+    }
+};
 
 // Initialise event system
 const eventEmitter = new EventEmitter()  
@@ -48,7 +54,9 @@ const measuring = serviceRegistry.measuring('memory');
 const notifying = serviceRegistry.notifying('memory');
 const worker = serviceRegistry.working('memory');
 const workflow = serviceRegistry.workflow('memory');
-const authservice = serviceRegistry.authservice('memory');
+const authservice = serviceRegistry.authservice({
+  saveReferer: true,
+});
 
 // Launch the application public folder
 app.use(express.static(path.join(__dirname, 'public')));
