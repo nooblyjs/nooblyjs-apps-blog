@@ -367,7 +367,7 @@
     elements.topicsList.innerHTML = tags
       .map(
         (entry) => `
-          <button type="button" class="btn btn-outline-primary btn-sm" data-tag="${escapeHtml(entry.tag)}" data-action="filter-tag">
+          <button type="button" class="btn btn-primary btn-sm" data-tag="${escapeHtml(entry.tag)}" data-action="filter-tag">
             <i class="bi bi-hash me-1"></i>${escapeHtml(entry.tag)}<span class="badge bg-light text-muted ms-2">${Number(entry.count)}</span>
           </button>
         `

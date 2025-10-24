@@ -31,7 +31,7 @@ var options = {
   dataDir : path.join(__dirname, './.app-blog/', 'data'),
   'express-app': app,
     brandingConfig: {
-      appName: 'App Lite',
+      appName: 'Wiki',
       primaryColor: '#000'
     }
 };
@@ -54,7 +54,8 @@ const measuring = serviceRegistry.measuring('memory');
 const notifying = serviceRegistry.notifying('memory');
 const worker = serviceRegistry.working('memory');
 const workflow = serviceRegistry.workflow('memory');
-const authservice = serviceRegistry.authservice({
+
+const authservice = serviceRegistry.authservice('file',{
   saveReferer: true,
 });
 

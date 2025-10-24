@@ -28,14 +28,16 @@ module.exports = (app, server, eventEmitter, serviceRegistry, options) => {
   const express = require('express');
   const path = require('path');
  
-  const logger = serviceRegistry.logger('console');  
-  const cache = serviceRegistry.cache('memory');
-  const queue = serviceRegistry.queue('memory');
-  const filing = serviceRegistry.filing('local');
-  const dataService = serviceRegistry.dataService('file');
-  const search = serviceRegistry.searching('file');
-  const measuring = serviceRegistry.measuring('memory');
-  const authService = serviceRegistry.authservice('file');
+  const logger = serviceRegistry.logger();  
+  const cache = serviceRegistry.cache();
+  const queue = serviceRegistry.queue();
+  const filing = serviceRegistry.filing();
+  const dataService = serviceRegistry.dataService();
+  const search = serviceRegistry.searching();
+  const measuring = serviceRegistry.measuring();
+  const authService = serviceRegistry.authservice();
+
+  // Create the middleware
   const servicesAuthMiddleware = serviceRegistry.servicesAuthMiddleware || ((req, res, next) => next());
 
   // Register routes and views

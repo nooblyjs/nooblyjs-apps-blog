@@ -29,7 +29,7 @@
     "kill": "  kill -9 $(lsof -t -i:3003)"
   },
   "dependencies": {
-    "nooblyjs-core": "latest"
+    "nooblyjs-core": "1.0.9"
   },
   "devDependencies": {}
 }
