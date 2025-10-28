@@ -17,13 +17,19 @@
   "directories": {
     "doc": "docs",
     "test": "tests"
-  },
+  },  
+  "files": [
+    "src",
+    "README.md",
+    "package.json",
+    "index.js"
+  ],
   "scripts": {
     "dev:web": "node ./app.js",
     "kill": "  kill -9 $(lsof -t -i:3003)"
   },
   "dependencies": {
-    "nooblyjs-core": "^1.0.6"
+    "nooblyjs-core": "1.0.9"
   },
   "devDependencies": {}
 }
