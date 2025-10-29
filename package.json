@@ -17,7 +17,7 @@
   "directories": {
     "doc": "docs",
     "test": "tests"
-  },  
+  },
   "files": [
     "src",
     "README.md",
@@ -29,7 +29,7 @@
     "kill": "  kill -9 $(lsof -t -i:3003)"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "nooblyjs-core": "1.0.9"
-  },
-  "devDependencies": {}
+  }
 }

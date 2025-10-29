@@ -29,11 +29,6 @@ app.use(bodyParser.json({ limit: '100mb' }));
 var options = { 
   logDir:  path.join(__dirname, './.app-blog/', 'logs'),
   dataDir : path.join(__dirname, './.app-blog/', 'data'),
-  'express-app': app,
-    brandingConfig: {
-      appName: 'Wiki',
-      primaryColor: '#000'
-    }
 };
 
 // Initialise event system
@@ -54,7 +49,6 @@ const measuring = serviceRegistry.measuring('memory');
 const notifying = serviceRegistry.notifying('memory');
 const worker = serviceRegistry.working('memory');
 const workflow = serviceRegistry.workflow('memory');
-
 const authservice = serviceRegistry.authservice('file',{
   saveReferer: true,
 });
@@ -66,6 +60,8 @@ const blog = require('./index.js');
 blog(app, server, eventEmitter, serviceRegistry,{});
 
 
-server.listen(PORT, () => {
-  log.info(`Nooblyjs Blog running on port ${PORT}`);
+server.listen(process.env.PORT || 3003, () => {
+  log.warn(`====================================`);
+  log.warn(`Nooblyjs Blog running on port ${process.env.PORT || 3003}`);
+  log.warn(`====================================`);
 });
