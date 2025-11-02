@@ -9,7 +9,7 @@ const { API_BASE_PATH, CONTAINERS, normalizeAuthor, sendJson, sendError } = requ
  * @param {Object} log Logger instance
  */
 module.exports = (app, dataStore, log) => {
-  const { getRecord, listRecords, createRecord, updateRecord, invalidateFeedCache } = dataStore;
+  const { getRecord, updateRecord, invalidateFeedCache } = dataStore;
 
   /**
    * LIST COMMENTS FOR A POST
@@ -17,11 +17,18 @@ module.exports = (app, dataStore, log) => {
   app.get(`${API_BASE_PATH}/posts/:id/comments`, async (req, res) => {
     try {
       const { id } = req.params;
-      const comments = await listRecords(CONTAINERS.COMMENTS);
-      const filtered = comments
-        .filter((comment) => comment.postId === id)
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      sendJson(res, 200, filtered, { total: filtered.length });
+      // Look up the post to get its actual ID and comments (id param might be a slug)
+      const post = await getRecord(CONTAINERS.POSTS, id);
+      if (!post) {
+        return sendJson(res, 200, [], { total: 0 });
+      }
+      const comments = Array.isArray(post.comments) ? post.comments : [];
+      const sorted = comments.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateA - dateB;
+      });
+      sendJson(res, 200, sorted, { total: sorted.length });
     } catch (error) {
       log.error('Failed to list comments', { error: error.message });
       sendError(res, 500, 'COMMENT_LIST_FAILED', 'Unable to load comments.');
@@ -44,23 +51,31 @@ module.exports = (app, dataStore, log) => {
         return sendError(res, 400, 'VALIDATION_ERROR', 'Comment text is required.');
       }
 
+      const now = new Date().toISOString();
+      const commentId = `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const commentRecord = {
-        postId: id,
+        id: commentId,
+        postId: post.id,
         author: normalizeAuthor(author),
         body: body.trim(),
-        status: 'published'
+        status: 'published',
+        createdAt: now,
+        updatedAt: now
       };
 
-      const created = await createRecord(CONTAINERS.COMMENTS, commentRecord);
-      await updateRecord(CONTAINERS.POSTS, id, (current) => ({
+      // Add comment to post's comments array
+      const existingComments = Array.isArray(post.comments) ? post.comments : [];
+      const updatedPost = await updateRecord(CONTAINERS.POSTS, post.id, (current) => ({
         ...current,
+        comments: [...existingComments, commentRecord],
         stats: {
           ...current.stats,
-          comments: (current.stats?.comments || 0) + 1
+          comments: existingComments.length + 1
         }
       }));
+      
       await invalidateFeedCache();
-      sendJson(res, 201, created);
+      sendJson(res, 201, commentRecord);
     } catch (error) {
       log.error('Failed to create comment', { error: error.message });
       sendError(res, 500, 'COMMENT_CREATE_FAILED', 'Unable to create comment.');
@@ -75,19 +90,47 @@ module.exports = (app, dataStore, log) => {
       const { id } = req.params;
       const { body, status } = req.body || {};
 
-      const updated = await updateRecord(CONTAINERS.COMMENTS, id, (current) => {
-        if (!current) return null;
-        return {
-          ...current,
-          body: body !== undefined ? body.trim() : current.body,
-          status: status || current.status
-        };
-      });
+      // Find the comment by searching through all posts
+      // This is not the most efficient, but necessary since comments are stored in post files
+      let foundComment = null;
+      let postWithComment = null;
+      
+      const allPosts = await dataStore.listRecords(CONTAINERS.POSTS);
+      for (const post of allPosts) {
+        if (Array.isArray(post.comments)) {
+          const comment = post.comments.find(c => c.id === id);
+          if (comment) {
+            foundComment = comment;
+            postWithComment = post;
+            break;
+          }
+        }
+      }
 
-      if (!updated) {
+      if (!foundComment || !postWithComment) {
         return sendError(res, 404, 'COMMENT_NOT_FOUND', 'Comment not found.');
       }
-      sendJson(res, 200, updated);
+
+      // Update the comment in the post's comments array
+      const updatedComments = postWithComment.comments.map(c => {
+        if (c.id === id) {
+          return {
+            ...c,
+            body: body !== undefined ? body.trim() : c.body,
+            status: status || c.status,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return c;
+      });
+
+      const updated = await updateRecord(CONTAINERS.POSTS, postWithComment.id, (current) => ({
+        ...current,
+        comments: updatedComments
+      }));
+
+      const updatedComment = updatedComments.find(c => c.id === id);
+      sendJson(res, 200, updatedComment);
     } catch (error) {
       log.error('Failed to update comment', { error: error.message });
       sendError(res, 500, 'COMMENT_UPDATE_FAILED', 'Unable to update comment.');

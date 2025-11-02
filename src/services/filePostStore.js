@@ -74,8 +74,13 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
     const text = raw.toString();
     const lines = text.split(/\r?\n/);
     const storyIndex = lines.findIndex((line) => line.trim().toLowerCase() === 'story:');
+    const commentsIndex = lines.findIndex((line) => line.trim().toLowerCase() === 'comments:');
+    
     const headerLines = storyIndex === -1 ? lines : lines.slice(0, storyIndex);
-    const storyLines = storyIndex === -1 ? [] : lines.slice(storyIndex + 1);
+    const storyEndIndex = commentsIndex === -1 ? lines.length : commentsIndex;
+    const storyLines = storyIndex === -1 ? [] : lines.slice(storyIndex + 1, storyEndIndex);
+    const commentsLines = commentsIndex === -1 ? [] : lines.slice(commentsIndex + 1);
+    
     const meta = {};
     headerLines.forEach((line) => {
       const separator = line.indexOf(':');
@@ -87,7 +92,61 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
       }
     });
     const story = storyLines.join('\n').replace(/^\s*\n/, '').replace(/\r\n/g, '\n');
-    return { meta, story };
+    
+    // Parse comments
+    const comments = [];
+    let currentComment = null;
+    for (const line of commentsLines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Comment separator (--- or blank line with dashes)
+      if (trimmed.startsWith('---')) {
+        if (currentComment && currentComment.body) {
+          comments.push(currentComment);
+        }
+        currentComment = null;
+        continue;
+      }
+      
+      // Comment metadata line: "ID: xxx" or "Author: xxx" etc.
+      const colonIndex = trimmed.indexOf(':');
+      if (colonIndex > 0 && colonIndex < trimmed.length - 1) {
+        const key = trimmed.slice(0, colonIndex).trim().toLowerCase();
+        const value = trimmed.slice(colonIndex + 1).trim();
+        
+        if (!currentComment) {
+          currentComment = { id: '', author: { name: '', handle: '' }, body: '', status: 'published', createdAt: '', updatedAt: '' };
+        }
+        
+        if (key === 'id') {
+          currentComment.id = value;
+        } else if (key === 'author') {
+          currentComment.author = normalizeAuthor(value);
+        } else if (key === 'status') {
+          currentComment.status = value || 'published';
+        } else if (key === 'created') {
+          currentComment.createdAt = value;
+        } else if (key === 'updated') {
+          currentComment.updatedAt = value;
+        }
+      } else {
+        // Comment body line
+        if (!currentComment) {
+          currentComment = { id: '', author: { name: 'Anonymous', handle: 'anonymous' }, body: '', status: 'published', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        }
+        if (currentComment.body) {
+          currentComment.body += '\n' + trimmed;
+        } else {
+          currentComment.body = trimmed;
+        }
+      }
+    }
+    if (currentComment && currentComment.body) {
+      comments.push(currentComment);
+    }
+    
+    return { meta, story, comments };
   };
 
   const parseDateField = (value) => {
@@ -161,6 +220,7 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
         bookmarks: Number(post.stats?.bookmarks || 0),
         comments: Number(post.stats?.comments || 0)
       },
+      comments: Array.isArray(post.comments) ? post.comments.map(c => ({ ...c })) : [],
       author: post.author ? { ...post.author } : null,
       seo: post.seo ? { ...post.seo } : null
     };
@@ -169,7 +229,7 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
     return result;
   };
 
-  const buildRecordFromMeta = (meta, story, filePath, statusHint, fileStats) => {
+  const buildRecordFromMeta = (meta, story, comments, filePath, statusHint, fileStats) => {
     const id = path.basename(filePath, POST_EXTENSION);
     const title = meta.title || 'Untitled';
     const content = (story || '').replace(/\r\n/g, '\n').trimEnd();
@@ -192,7 +252,7 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
       views: Number(meta.views ?? 0) || 0,
       claps: Number(meta.claps ?? 0) || 0,
       bookmarks: Number(meta.bookmarks ?? 0) || 0,
-      comments: Number(meta.comments ?? 0) || 0
+      comments: Number(meta.comments ?? 0) || (comments ? comments.length : 0)
     };
 
     const record = {
@@ -211,6 +271,7 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
       scheduledFor,
       readTimeMinutes: estimateReadTime(content),
       stats,
+      comments: comments || [],
       seo: {
         title,
         description: buildExcerpt(content, 160),
@@ -248,17 +309,61 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
       .map(([label, value]) => `${label}: ${value === null || value === undefined ? '' : value}`)
       .join('\n');
     const storyBlock = story ? `${story}\n` : '';
-    return `${header}\n\nStory:\n\n${storyBlock}`;
+    
+    // Serialize comments
+    let commentsBlock = '';
+    if (Array.isArray(post.comments) && post.comments.length > 0) {
+      const commentLines = ['Comments:'];
+      post.comments.forEach((comment, index) => {
+        if (index > 0) {
+          commentLines.push('---');
+        }
+        commentLines.push(`ID: ${comment.id || ''}`);
+        commentLines.push(`Author: ${comment.author?.name || 'Anonymous'}`);
+        commentLines.push(`Status: ${comment.status || 'published'}`);
+        if (comment.createdAt) {
+          commentLines.push(`Created: ${comment.createdAt}`);
+        }
+        if (comment.updatedAt && comment.updatedAt !== comment.createdAt) {
+          commentLines.push(`Updated: ${comment.updatedAt}`);
+        }
+        commentLines.push(''); // Blank line before body
+        if (comment.body) {
+          commentLines.push(comment.body);
+        }
+      });
+      commentsBlock = '\n\n' + commentLines.join('\n') + '\n';
+    }
+    
+    return `${header}\n\nStory:\n\n${storyBlock}${commentsBlock}`;
   };
 
   const persistRecord = async (record, previousPath) => {
     await ensureReady();
+    // Preserve comments from existing record if updating and new record doesn't have comments
+    let existingComments = [];
+    if (!Array.isArray(record.comments) || record.comments.length === 0) {
+      // Try to get existing comments from the current file
+      const currentPath = previousPath || path.join(record.status === 'published' ? publishedDir : draftsDir, `${record.id}${POST_EXTENSION}`);
+      if (await fileExists(currentPath)) {
+        try {
+          const existing = await get(record.id);
+          if (existing && Array.isArray(existing.comments)) {
+            existingComments = existing.comments;
+          }
+        } catch (_) {
+          // ignore errors reading existing
+        }
+      }
+    }
+    
     const normalized = {
       ...record,
       id: record.id,
       title: record.title || 'Untitled',
       subtitle: record.subtitle || '',
       tags: Array.isArray(record.tags) ? [...record.tags] : [],
+      comments: Array.isArray(record.comments) && record.comments.length > 0 ? record.comments : existingComments,
       stats: { ...(record.stats || {}) },
       seo: record.seo ? { ...record.seo } : null,
       author: record.author ? { ...record.author } : record.author
@@ -281,11 +386,13 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
     } else {
       normalized.publishedAt = null;
     }
+    // Update comment count from actual comments array
+    const commentCount = Array.isArray(normalized.comments) ? normalized.comments.length : 0;
     normalized.stats = {
       views: Number(normalized.stats.views || 0),
       claps: Number(normalized.stats.claps || 0),
       bookmarks: Number(normalized.stats.bookmarks || 0),
-      comments: Number(normalized.stats.comments || 0)
+      comments: commentCount
     };
     normalized.seo = normalized.seo
       ? {
@@ -335,8 +442,8 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
     } catch (_) {
       // ignore stat errors
     }
-    const { meta, story } = parseDocument(raw);
-    const record = buildRecordFromMeta(meta, story, filePath, statusHint, fileStats);
+    const { meta, story, comments } = parseDocument(raw);
+    const record = buildRecordFromMeta(meta, story, comments, filePath, statusHint, fileStats);
     return finalize(record, filePath);
   };
 
@@ -403,12 +510,21 @@ function createFilePostStore({ filing, logger, toSlug, buildExcerpt, estimateRea
     if (typeof updater === 'function') {
       next = await updater(base);
     } else {
-      next = { ...base, ...updater };
+      // Preserve comments if not explicitly provided in updater
+      const updaterWithComments = { ...updater };
+      if (!Array.isArray(updaterWithComments.comments)) {
+        updaterWithComments.comments = base.comments || [];
+      }
+      next = { ...base, ...updaterWithComments };
     }
     if (!next) return null;
     next.id = id;
     next.slug = next.slug || existing.slug || id;
     next.createdAt = next.createdAt || existing.createdAt;
+    // Ensure comments array is preserved
+    if (!Array.isArray(next.comments)) {
+      next.comments = base.comments || [];
+    }
     return persistRecord(next, previousPath);
   };
 
