@@ -30,6 +30,9 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "nooblyjs-core": "1.0.9"
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "nooblyjs-core": "../nooblyjs-core",
+    "passport": "^0.7.0"
   }
 }
