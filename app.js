@@ -56,9 +56,14 @@ const authservice = serviceRegistry.authservice('file',{
 // Launch the application public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Launch the application docs folder
+app.use('/docs', express.static(path.join(__dirname, 'docs')));
+
+// Launch the application docs folder
+app.use('/readme', express.static(path.join(__dirname, 'README.md')));
+
 const blog = require('./index.js');
 blog(app, server, eventEmitter, serviceRegistry,{});
-
 
 server.listen(process.env.PORT || 3003, () => {
   log.warn(`====================================`);
